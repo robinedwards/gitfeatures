@@ -1,0 +1,5 @@
+import gitfeatures
+import sys
+
+
+gitfeatures.run('hotfix', sys.argv[1:])

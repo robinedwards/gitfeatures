@@ -1,0 +1,5 @@
+import gitfeatures
+import sys
+
+
+gitfeatures.run('feature', sys.argv[1:])
