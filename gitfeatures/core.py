@@ -85,4 +85,3 @@ def run(prefix, args):
             sys.exit("Usage: git %s finish [%s_name]" % (prefix, prefix))
     else:
         sys.exit("Usage: git %s <new/finish> <%s_name>" % (prefix, prefix))
-
