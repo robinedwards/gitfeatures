@@ -27,6 +27,7 @@ def new_feature(name, prefix):
 
 def finish_feature(name, prefix):
     branch = _current_branch()
+
     if branch != 'master':
         _call(["git", "checkout", "master"])
     elif name:
@@ -34,7 +35,9 @@ def finish_feature(name, prefix):
     else:
         sys.exit(__name__ + ": please provide a branch name if on master")
 
-    if check_output(["git", "diff", branch]):
+    _call(["git", "pull", "origin", "master"])
+
+    if _call(["git", "diff", branch, 'origin/master']):
         sys.exit(__name__ + ": " + branch \
                 + " contains commits that are not in master, " \
                 + "raise a pull request and get them merged in.")
