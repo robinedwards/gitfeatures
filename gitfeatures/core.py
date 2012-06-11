@@ -74,12 +74,12 @@ def _branch_exists(name):
 
 
 def run(prefix, args):
-    if args[0].lower() == 'new':
+    if len(args) and args[0].lower() == 'new':
         if len(args) == 2:
             new_feature(args[1], prefix)
         else:
             sys.exit("Usage: git %s new <%s_name>" % (prefix, prefix))
-    elif args[0].lower() == 'finish':
+    elif len(args) and args[0].lower() == 'finish':
         if len(args) == 1:
             finish_feature(None, prefix)
         elif len(args) == 2:
