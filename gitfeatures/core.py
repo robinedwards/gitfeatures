@@ -35,12 +35,13 @@ def finish_feature(name, prefix):
     else:
         sys.exit(__name__ + ": please provide a branch name if on master")
 
-    _call(["git", "pull", "origin", "master"])
+    _call(["git", "remote", "update", "origin"])
 
-    if _call(["git", "diff", branch, 'origin/master']):
+    commits = _call(["git", "log", '--oneline', branch, '^origin/master'])
+    if commits:
         sys.exit(__name__ + ": " + branch \
-                + " contains commits that are not in master, " \
-                + "raise a pull request and get them merged in.")
+                + " contains commits that are not in master:\n" + commits \
+                + "\nraise a pull request and get them merged in.")
     else:
         _call(["git", "push", "origin", ":" + branch])
         _call(["git", "branch", "-d", branch])
