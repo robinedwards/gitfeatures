@@ -51,15 +51,25 @@ def pullrequest(args):
     branch = _current_branch()
     if branch == 'master':
         sys.exit(__name__ + ": can't issue pull requests on master")
+
     # check its up to date with remote master if not pull
     _call(['git', 'remote', 'update', 'origin'])
     commits = _call(['git', 'log', '--oneline', '^' + branch, 'origin/master'])
     if commits:
         print "Your branch is behind origin/master so cannot be automatically merged."
         print commits
-        print "Update branch? [y/n]"
+        print "Update local branch? [y/n]"
         if raw_input().lower() == 'y':
-            _call(['git', 'rebase', 'origin/master'])
+            _call(['git', 'pull', 'origin', 'master'])
+
+    # check if there are any unpushed commits
+    commits = _call(['git', 'log', '--oneline', branch, '^origin/' + branch])
+    if commits:
+        print "You have unpushed commits:"
+        print commits
+        print "Push commits to origin [y/n]"
+        if raw_input().lower() == 'y':
+            _call(['git', 'push', 'origin', branch + ':' + branch])
 
     origin = _call(["git", "config", "--get", "remote.origin.url"])
     name = origin.split(':')[1].replace(".git\n", '')
