@@ -44,7 +44,7 @@ def finish_feature(name, prefix):
                 + "\nraise a pull request and get them merged in.")
     else:
         _call(["git", "push", "origin", ":" + branch])
-        _call(["git", "branch", "-d", branch])
+        _call(["git", "branch", "-D", branch])
 
 
 def pullrequest(args):
