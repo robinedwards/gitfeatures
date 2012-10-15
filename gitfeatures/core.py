@@ -1,7 +1,7 @@
 from subprocess import check_output, CalledProcessError
+import re
 import webbrowser
 import os
-import re
 import sys
 
 
@@ -13,6 +13,7 @@ def _call(args):
 
 
 def new_feature(name, prefix):
+    name = re.sub('\W', '_', name)
     if _current_branch() != 'master':
         sys.exit(__name__ + ": you may only start %ss from master branch" % prefix)
 
