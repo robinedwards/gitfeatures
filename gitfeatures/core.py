@@ -1,5 +1,6 @@
 from subprocess import check_output, CalledProcessError
 import webbrowser
+import os
 import re
 import sys
 
@@ -74,7 +75,7 @@ def pullrequest(args):
     origin = _call(["git", "config", "--get", "remote.origin.url"])
     name = origin.split(':')[1].replace(".git\n", '')
     url = "https://github.com/" + name + "/pull/new/" + branch
-    if len(args) > 0 and args[0] == '--dry-run':
+    if (len(args) > 0 and args[0] == '--dry-run') or os.environ.get('CONSOLEONLY', False):
         print url
     else:
         webbrowser.open_new_tab(url)
