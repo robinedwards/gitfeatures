@@ -16,7 +16,7 @@ def new_feature(name, prefix):
     if _current_branch() != 'master':
         sys.exit(__name__ + ": you may only start %ss from master branch" % prefix)
 
-    _call(["git", "remote", "update"])
+    _call(["git", "remote", "update", "origin"])
     new_branch = "%s_%s" % (prefix, name)
 
     if _branch_exists(new_branch):
