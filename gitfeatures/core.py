@@ -32,7 +32,8 @@ def finish_feature(name, prefix):
 
     if branch != 'master':
         _call(["git", "checkout", "master"])
-    elif name:
+
+    if name:
         branch = prefix + '_' + name
     else:
         sys.exit(__name__ + ": please provide a branch name if on master")
