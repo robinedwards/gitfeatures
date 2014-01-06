@@ -28,12 +28,15 @@ def new_feature(name, prefix):
 
 
 def finish_feature(name, prefix):
-    branch = _current_branch()
+    cur_branch = _current_branch()
 
-    if branch != 'master':
-        _call(["git", "checkout", "master"])
-    elif name:
+    if name:
         branch = prefix + '_' + name
+        if branch == cur_branch:
+            _call(["git", "checkout", "master"])
+    elif cur_branch != 'master':
+        branch = cur_branch
+        _call(["git", "checkout", "master"])
     else:
         sys.exit(__name__ + ": please provide a branch name if on master")
 
