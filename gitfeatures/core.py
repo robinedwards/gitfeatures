@@ -63,9 +63,15 @@ def pullrequest(args):
     if commits:
         print "Your branch is behind origin/master so cannot be automatically merged."
         print commits
-        print "Update local branch? [y/n]"
+        print "Do you wish to update and merge master (If conflicts occur, you will be able to fix them)? [y/n]"
         if raw_input().lower() == 'y':
-            _call(['git', 'pull', 'origin', 'master'])
+            _call(['git', 'checkout', 'master'])
+            _call(['git', 'pull'])
+            _call(['git', 'checkout', branch])
+            output = _call(['git', 'merge', 'master'])
+            if 'CONFLICT' in output:
+                print "Fix the conflicts and run git pullrequest again"
+                sys.exit(__name__ + ": Fix the conflicts and rerun git pullrequest")
 
     # check if there are any unpushed commits
     commits = _call(['git', 'log', '--oneline', branch, '^origin/' + branch])
