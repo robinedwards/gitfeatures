@@ -51,3 +51,4 @@ For bugs and hot fixes the same functionality is used with 'hotfix' instead of '
     $ git hotfix ie7_menu
     ...
     $ git hotfix finish
+
