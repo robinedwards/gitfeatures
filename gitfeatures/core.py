@@ -68,10 +68,17 @@ def pullrequest(args):
             _call(['git', 'checkout', 'master'])
             _call(['git', 'pull'])
             _call(['git', 'checkout', branch])
-            output = _call(['git', 'merge', 'master'])
-            if 'CONFLICT' in output:
-                print "Fix the conflicts and run git pullrequest again"
-                sys.exit(__name__ + ": Fix the conflicts and rerun git pullrequest")
+            try:
+                print "git merge master"
+                output = check_output(['git', 'merge', 'master'])
+                print output
+                print "Congratulations, successfully merged master"
+            except CalledProcessError as e:
+                if 'CONFLICT' in e.output:
+                    err =  e.output + "\n\nUnlucky! You have work to do. Fix the above conflicts and run git pullrequest again"
+                    sys.exit(err)
+                else:
+                    raise()
 
     # check if there are any unpushed commits
     commits = _call(['git', 'log', '--oneline', branch, '^origin/' + branch])
