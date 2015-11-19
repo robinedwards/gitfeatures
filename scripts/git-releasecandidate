@@ -3,4 +3,4 @@ import gitfeatures
 import sys
 
 
-gitfeatures.run('rc', sys.argv[1:])
+gitfeatures.run('releasecandidate', sys.argv[1:])
