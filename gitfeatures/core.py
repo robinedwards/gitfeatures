@@ -1,4 +1,5 @@
 from subprocess import check_output, CalledProcessError
+import datetime
 import re
 import webbrowser
 import os
@@ -114,7 +115,13 @@ def _branch_exists(name):
 
 def run(prefix, args):
     if len(args) and args[0].lower() == 'new':
-        if len(args) == 2:
+        if prefix == 'rc':
+            if len(args)  == 2:
+                new_feature(args[1], prefix)
+            else:
+                name = str(datetime.date.today())
+                new_feature(name, prefix)
+        elif len(args) == 2:
             new_feature(args[1], prefix)
         else:
             sys.exit("Usage: git %s new <%s_name>" % (prefix, prefix))
