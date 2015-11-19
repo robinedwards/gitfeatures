@@ -13,5 +13,10 @@ setup(
     packages=['gitfeatures'],
     license="MIT",
     long_description=long_description,
-    scripts=['scripts/git-feature', 'scripts/git-hotfix', 'scripts/git-pullrequest']
+    scripts=[
+        'scripts/git-feature',
+        'scripts/git-hotfix',
+        'scripts/git-pullrequest'
+        'scripts/git-releasecandidate'
+    ]
 )
