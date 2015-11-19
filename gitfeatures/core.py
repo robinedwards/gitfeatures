@@ -115,7 +115,7 @@ def _branch_exists(name):
 
 def run(prefix, args):
     if len(args) and args[0].lower() == 'new':
-        if prefix == 'rc':
+        if prefix == 'releasecandidate':
             if len(args)  == 2:
                 new_feature(args[1], prefix)
             else:
