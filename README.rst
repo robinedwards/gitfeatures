@@ -42,6 +42,12 @@ Or if your not currently working on the feature branch
 
     $ git feature finish html_pruning
 
+Or if you wish to create a stable branch from a specific checkout
+
+    $ git stable
+
+will create a branch called stable_YYYYMMDD
+
 *********
 Hot fixes
 *********
