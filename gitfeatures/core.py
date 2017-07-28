@@ -137,7 +137,7 @@ def _branch_exists(name):
 
 
 def _get_stable_branches():
-    branch_list = _call(["git", "branch", "-a", "|", "grep", "-e ", "' stable_\d\d\d\d\d\d\d\d'"], shell=True).strip()  # noqa
+    branch_list = check_output(["git", "branch", "-a", "|", "grep", "-e ", "' stable_\d\d\d\d\d\d\d\d'"], shell=True).strip()  # noqa
     branch_list = branch_list.split('\n')
     branch_list = map(lambda it: it.strip(), branch_list)
 
