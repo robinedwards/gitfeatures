@@ -16,6 +16,7 @@ setup(
     scripts=[
         'scripts/git-feature',
         'scripts/git-hotfix',
+        'scripts/git-stable',
         'scripts/git-pullrequest',
         'scripts/git-releasecandidate'
     ]
