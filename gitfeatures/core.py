@@ -53,6 +53,14 @@ def finish_feature(name, prefix):
         _call(["git", "branch", "-D", branch])
 
 
+def stable(args):
+    date = datetime.datetime.now()
+    new_branch = 'stable_{}'.format(date.strftime('%Y%m%d'))
+
+    _call(["git", "checkout", "-b", new_branch])
+    _call(["git", "push", "-u", "origin", new_branch + ":" + new_branch])
+
+
 def pullrequest(args):
     branch = _current_branch()
     if branch == 'master':
