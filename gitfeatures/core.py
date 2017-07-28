@@ -63,7 +63,7 @@ def stable(args):
         _call(["git", "push", "-u", "origin", new_branch + ":" + new_branch])
 
         stable_branches = _get_stable_branches()
-        if len(stable_branches > 3):
+        if len(stable_branches) > 3:
             print "you have more than 3 stable branches, shall I delete the eldest one? [y/n]"  # noqa
             if raw_input().lower() == 'y':
                 branch = stable_branches[0]
