@@ -44,9 +44,14 @@ Or if your not currently working on the feature branch
 
 Or if you wish to create a stable branch from a specific checkout
 
-    $ git stable
+    $ git stable new
 
 will create a branch called stable_YYYYMMDD
+
+Or if you wish to switch to the current latest stable branch
+
+    $ git stable
+
 
 *********
 Hot fixes
