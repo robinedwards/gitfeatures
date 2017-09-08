@@ -137,9 +137,10 @@ def _branch_exists(name):
 
 
 def _get_stable_branches():
-    branch_list = check_output("git branch -a | grep -e ' stable_\d\d\d\d\d\d\d\d'", shell=True).strip()  # noqa
+    _call(["git", "remote", "update", "origin"])
+    branch_list = check_output("git branch -r | grep -e '\/stable_\d\d\d\d\d\d\d\d'", shell=True).strip()  # noqa
     branch_list = branch_list.split('\n')
-    branch_list = map(lambda it: it.strip(), branch_list)
+    branch_list = map(lambda it: it.split('/')[1].strip(), branch_list)
 
     return branch_list
 
