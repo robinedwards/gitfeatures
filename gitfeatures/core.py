@@ -72,8 +72,11 @@ def stable(args):
     else:
         # checkout the latest stable branch
         stable_branches = _get_stable_branches()
-        branch = stable_branches[-1]
-        _call(["git", "checkout", branch])
+        if stable_branches:
+            branch = stable_branches[-1]
+            _call(["git", "checkout", branch])
+        else:
+            print "No stable branches"
 
 
 def pullrequest(args):
@@ -138,11 +141,17 @@ def _branch_exists(name):
 
 def _get_stable_branches():
     _call(["git", "remote", "update", "origin"])
-    branch_list = check_output("git branch -r | grep -e '\/stable_\d\d\d\d\d\d\d\d'", shell=True).strip()  # noqa
-    branch_list = branch_list.split('\n')
-    branch_list = map(lambda it: it.split('/')[1].strip(), branch_list)
+    try:
+        branch_list = check_output("git branch -r | grep -e '\/stable_\d\d\d\d\d\d\d\d'", shell=True).strip()  # noqa
+        branch_list = branch_list.split('\n')
+        branch_list = map(lambda it: it.split('/')[1].strip(), branch_list)
 
-    return branch_list
+        return branch_list
+    except CalledProcessError:
+        return []
+    # branch_list = check_output("git branch -a", shell=True).strip()  # noqa
+    # branch_list = [b.strip() for b in branch_list.split('\n')]
+    # return [br for br in branch_list if re.match('stable_\d\d\d\d\d\d\d\d', br)]  # noqa
 
 
 def run(prefix, args):
