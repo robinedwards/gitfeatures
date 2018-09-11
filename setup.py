@@ -13,6 +13,7 @@ setup(
     packages=['gitfeatures'],
     license="MIT",
     long_description=long_description,
+    use_2to3=True,
     scripts=[
         'scripts/git-feature',
         'scripts/git-hotfix',
