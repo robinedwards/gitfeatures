@@ -149,9 +149,6 @@ def _get_stable_branches():
         return branch_list
     except CalledProcessError:
         return []
-    # branch_list = check_output("git branch -a", shell=True).strip()  # noqa
-    # branch_list = [b.strip() for b in branch_list.split('\n')]
-    # return [br for br in branch_list if re.match('stable_\d\d\d\d\d\d\d\d', br)]  # noqa
 
 
 def run(prefix, args):
