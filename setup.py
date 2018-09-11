@@ -2,7 +2,7 @@ from setuptools import setup
 
 long_description = ""
 try:
-    long_description = open("README.rst", "rb").read()
+    long_description = open("README.rst", "r").read()
 except:
     pass
 
@@ -13,6 +13,7 @@ setup(
     packages=['gitfeatures'],
     license="MIT",
     long_description=long_description,
+    use_2to3=True,
     scripts=[
         'scripts/git-feature',
         'scripts/git-hotfix',
