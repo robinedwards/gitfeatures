@@ -10,7 +10,7 @@ master_branch = os.environ.get('GITFEATURES_MASTER_BRANCH', 'master')
 
 def _call(args):
     try:
-        return check_output(args)
+        return check_output(args).decode('utf-8')
     except CalledProcessError:
         sys.exit(__name__ + ": none zero exit status executing: " + " ".join(args))  # noqa
 
@@ -26,7 +26,6 @@ def new_feature(name, prefix):
 
     if _branch_exists(new_branch):
         sys.exit(__name__ + ": local or remote branch already exists: " + new_branch)  # noqa
-    print('name, prefix, new_branch')
 
     _call(["git", "checkout", "-b", new_branch])
     _call(["git", "push", "-u", "origin", new_branch + ":" + new_branch])
@@ -130,7 +129,7 @@ def pullrequest(args):
 
 
 def _current_branch():
-    output = _call(["git", "branch"]).decode('utf-8')
+    output = _call(["git", "branch"])
     branch = re.search('^\* (.+)$', output, flags=re.M).group(1)
     if not branch:
         sys.exit(__name__ + ": unable to detect current branch")
@@ -139,7 +138,7 @@ def _current_branch():
 
 
 def _branch_exists(name):
-    branch_list = _call(["git", "branch", "-a"]).decode('utf-8')
+    branch_list = _call(["git", "branch", "-a"])
     return 1 if re.search('' + name + '$', branch_list, flags=re.M) else 0
 
 
