@@ -5,6 +5,8 @@ import webbrowser
 import os
 import sys
 
+master_branch = os.environ.get('GITFEATURES_MASTER_BRANCH', 'master')
+
 
 def _call(args):
     try:
@@ -15,8 +17,8 @@ def _call(args):
 
 def new_feature(name, prefix):
     name = re.sub('\W', '_', name)
-    if _current_branch() != 'master':
-        sys.exit(__name__ + ": you may only start %ss from master branch" % prefix)  # noqa
+    if _current_branch() != master_branch:
+        sys.exit(__name__ + ": you may only start {} from {} branch".format(prefix, master_branch))  # noqa
 
     _call(["git", "remote", "update", "origin"])
     new_branch = "%s_%s" % (prefix, name)
@@ -34,20 +36,20 @@ def finish_feature(name, prefix):
     if name:
         branch = prefix + '_' + name
         if branch == cur_branch:
-            _call(["git", "checkout", "master"])
-    elif cur_branch != 'master':
+            _call(["git", "checkout", master_branch])
+    elif cur_branch != master_branch:
         branch = cur_branch
-        _call(["git", "checkout", "master"])
+        _call(["git", "checkout", master_branch])
     else:
-        sys.exit(__name__ + ": please provide a branch name if on master")
+        sys.exit(__name__ + ": please provide a branch name if on {}".format(master_branch))
 
     _call(["git", "remote", "update", "origin"])
 
-    commits = _call(["git", "log", '--oneline', branch, '^origin/master'])
+    commits = _call(["git", "log", '--oneline', branch, '^origin/{}'.format(master_branch)])
     if commits:
         sys.exit(
             __name__ + ": " + branch
-            + " contains commits that are not in master:\n" + commits
+            + " contains commits that are not in {}:\n".format(master_branch) + commits
             + "\nraise a pull request and get them merged in.")
     else:
         _call(["git", "push", "origin", ":" + branch])
@@ -81,25 +83,25 @@ def stable(args):
 
 def pullrequest(args):
     branch = _current_branch()
-    if branch == 'master':
-        sys.exit(__name__ + ": can't issue pull requests on master")
+    if branch == master_branch:
+        sys.exit(__name__ + ": can't issue pull requests on {}".format(master_branch))
 
     # check its up to date with remote master if not pull
     _call(['git', 'remote', 'update', 'origin'])
-    commits = _call(['git', 'log', '--oneline', '^' + branch, 'origin/master'])
+    commits = _call(['git', 'log', '--oneline', '^' + branch, 'origin/{}'.format(master_branch])
     if commits:
-        print("Your branch is behind origin/master so cannot be automatically merged.")  # noqa
+        print("Your branch is behind origin/{} so cannot be automatically merged.".format(master_branch))  # noqa
         print(commits)
-        print("Do you wish to update and merge master (If conflicts occur, you will be able to fix them)? [y/n]")  # noqa
+        print("Do you wish to update and merge {} (If conflicts occur, you will be able to fix them)? [y/n]".format(master_branch))  # noqa
         if raw_input().lower() == 'y':
-            _call(['git', 'checkout', 'master'])
+            _call(['git', 'checkout', master_branch])
             _call(['git', 'pull'])
             _call(['git', 'checkout', branch])
             try:
-                print("git merge master")
-                output = check_output(['git', 'merge', 'master'])
+                print("git merge {}".format(master_branch))
+                output = check_output(['git', 'merge', master_branch])
                 print(output)
-                print("Congratulations, successfully merged master")
+                print("Congratulations, successfully merged {}".format(master_branch))
             except CalledProcessError as e:
                 if 'CONFLICT' in e.output:
                     err =  e.output + "\n\nUnlucky! You have work to do. Fix the above conflicts and run git pullrequest again"  # noqa
