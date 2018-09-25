@@ -129,8 +129,8 @@ def pullrequest(args):
 
 
 def _current_branch():
-    output = _call(["git", "branch"])
-    branch = re.search(b'^\* (.+)$', output, flags=re.M).group(1)
+    output = _call(["git", "branch"]).decode('utf-8')
+    branch = re.search('^\* (.+)$', output, flags=re.M).group(1)
     if not branch:
         sys.exit(__name__ + ": unable to detect current branch")
     else:
