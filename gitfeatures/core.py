@@ -18,6 +18,7 @@ def _call(args):
 def new_feature(name, prefix):
     name = re.sub('\W', '_', name)
     if _current_branch() != master_branch:
+        print(_current_branch(), master_branch)
         sys.exit(__name__ + ": you may only start {} from {} branch".format(prefix, master_branch))  # noqa
 
     _call(["git", "remote", "update", "origin"])
