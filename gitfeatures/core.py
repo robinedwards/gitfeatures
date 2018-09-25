@@ -64,7 +64,7 @@ def stable(args):
 
         stable_branches = _get_stable_branches()
         if len(stable_branches) > 3:
-            print "you have more than 3 stable branches, shall I delete the eldest one? [y/n]"  # noqa
+            print("you have more than 3 stable branches, shall I delete the eldest one? [y/n]")  # noqa
             if raw_input().lower() == 'y':
                 branch = stable_branches[0]
                 _call(["git", "push", "origin", "--delete", branch])
@@ -76,7 +76,7 @@ def stable(args):
             branch = stable_branches[-1]
             _call(["git", "checkout", branch])
         else:
-            print "No stable branches"
+            print("No stable branches")
 
 
 def pullrequest(args):
@@ -88,18 +88,18 @@ def pullrequest(args):
     _call(['git', 'remote', 'update', 'origin'])
     commits = _call(['git', 'log', '--oneline', '^' + branch, 'origin/master'])
     if commits:
-        print "Your branch is behind origin/master so cannot be automatically merged."  # noqa
+        print("Your branch is behind origin/master so cannot be automatically merged.")  # noqa
         print commits
-        print "Do you wish to update and merge master (If conflicts occur, you will be able to fix them)? [y/n]"  # noqa
+        print("Do you wish to update and merge master (If conflicts occur, you will be able to fix them)? [y/n]")  # noqa
         if raw_input().lower() == 'y':
             _call(['git', 'checkout', 'master'])
             _call(['git', 'pull'])
             _call(['git', 'checkout', branch])
             try:
-                print "git merge master"
+                print("git merge master")
                 output = check_output(['git', 'merge', 'master'])
                 print output
-                print "Congratulations, successfully merged master"
+                print("Congratulations, successfully merged master")
             except CalledProcessError as e:
                 if 'CONFLICT' in e.output:
                     err =  e.output + "\n\nUnlucky! You have work to do. Fix the above conflicts and run git pullrequest again"  # noqa
@@ -110,9 +110,9 @@ def pullrequest(args):
     # check if there are any unpushed commits
     commits = _call(['git', 'log', '--oneline', branch, '^origin/' + branch])
     if commits:
-        print "You have unpushed commits:"
+        print("You have unpushed commits:")
         print commits
-        print "Push commits to origin [y/n]"
+        print("Push commits to origin [y/n]")
         if raw_input().lower() == 'y':
             _call(['git', 'push', 'origin', branch + ':' + branch])
 
