@@ -88,7 +88,7 @@ def pullrequest(args):
 
     # check its up to date with remote master if not pull
     _call(['git', 'remote', 'update', 'origin'])
-    commits = _call(['git', 'log', '--oneline', '^' + branch, 'origin/{}'.format(master_branch])
+    commits = _call(['git', 'log', '--oneline', '^' + branch, 'origin/{}'.format(master_branch)])
     if commits:
         print("Your branch is behind origin/{} so cannot be automatically merged.".format(master_branch))  # noqa
         print(commits)
