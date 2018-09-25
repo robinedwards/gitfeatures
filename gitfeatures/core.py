@@ -127,7 +127,7 @@ def pullrequest(args):
 
 def _current_branch():
     output = _call(["git", "branch"])
-    branch = re.search('^\* (.+)$', output, flags=re.M).group(1)
+    branch = re.search(b'^\* (.+)$', output, flags=re.M).group(1)
     if not branch:
         sys.exit(__name__ + ": unable to detect current branch")
     else:
@@ -136,7 +136,7 @@ def _current_branch():
 
 def _branch_exists(name):
     branch_list = _call(["git", "branch", "-a"])
-    return 1 if re.search(name + '$', branch_list, flags=re.M) else 0
+    return 1 if re.search(b'' + name + '$', branch_list, flags=re.M) else 0
 
 
 def _get_stable_branches():
