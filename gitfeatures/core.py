@@ -89,7 +89,7 @@ def pullrequest(args):
     commits = _call(['git', 'log', '--oneline', '^' + branch, 'origin/master'])
     if commits:
         print("Your branch is behind origin/master so cannot be automatically merged.")  # noqa
-        print commits
+        print(commits)
         print("Do you wish to update and merge master (If conflicts occur, you will be able to fix them)? [y/n]")  # noqa
         if raw_input().lower() == 'y':
             _call(['git', 'checkout', 'master'])
@@ -98,7 +98,7 @@ def pullrequest(args):
             try:
                 print("git merge master")
                 output = check_output(['git', 'merge', 'master'])
-                print output
+                print(output)
                 print("Congratulations, successfully merged master")
             except CalledProcessError as e:
                 if 'CONFLICT' in e.output:
@@ -111,7 +111,7 @@ def pullrequest(args):
     commits = _call(['git', 'log', '--oneline', branch, '^origin/' + branch])
     if commits:
         print("You have unpushed commits:")
-        print commits
+        print(commits)
         print("Push commits to origin [y/n]")
         if raw_input().lower() == 'y':
             _call(['git', 'push', 'origin', branch + ':' + branch])
@@ -120,7 +120,7 @@ def pullrequest(args):
     name = origin.split(':')[1].replace(".git\n", '')
     url = "https://github.com/" + name + "/pull/new/" + branch
     if (len(args) > 0 and args[0] == '--dry-run') or os.environ.get('CONSOLEONLY', False):  # noqa
-        print url
+        print(url)
     else:
         webbrowser.open_new_tab(url)
 
