@@ -6,6 +6,7 @@ import os
 import sys
 
 master_branch = os.environ.get('GITFEATURES_MASTER_BRANCH', 'master')
+repo = os.environ.get('GITFEATURES_REPO', 'github')
 
 
 def _call(args):
@@ -121,12 +122,19 @@ def pullrequest(args):
 
     origin = _call(["git", "config", "--get", "remote.origin.url"])
     name = origin.split(':')[1].replace(".git\n", '')
-    url = "https://github.com/" + name + "/pull/new/" + branch
+    url = _get_pullrequest_url(name, branch)
     if (len(args) > 0 and args[0] == '--dry-run') or os.environ.get('CONSOLEONLY', False):  # noqa
         print(url)
     else:
         webbrowser.open_new_tab(url)
 
+def _get_pullrequest_url(name, branch):
+
+    if repo == 'github':
+        url = "https://github.com/" + name + "/pull/new/" + branch
+    elif repo == 'bitbucket':
+        url = "https://bitbucket.org/" + name + "/pull-requests/new?t=1&source=" + branch
+    return url
 
 def _current_branch():
     output = _call(["git", "branch"])
