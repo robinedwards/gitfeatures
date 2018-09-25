@@ -26,6 +26,7 @@ def new_feature(name, prefix):
 
     if _branch_exists(new_branch):
         sys.exit(__name__ + ": local or remote branch already exists: " + new_branch)  # noqa
+    print('name, prefix, new_branch')
 
     _call(["git", "checkout", "-b", new_branch])
     _call(["git", "push", "-u", "origin", new_branch + ":" + new_branch])
@@ -138,8 +139,8 @@ def _current_branch():
 
 
 def _branch_exists(name):
-    branch_list = _call(["git", "branch", "-a"])
-    return 1 if re.search(b'' + name + '$', branch_list, flags=re.M) else 0
+    branch_list = _call(["git", "branch", "-a"]).decode('utf-8')
+    return 1 if re.search('' + name + '$', branch_list, flags=re.M) else 0
 
 
 def _get_stable_branches():
