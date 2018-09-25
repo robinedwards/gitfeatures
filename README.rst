@@ -16,6 +16,18 @@ Install for development:
     $ cd gitfeatures
     $ python setup.py develop
 
+*************
+Configuration
+*************
+
+This project works out of the box with github. If you would like to use bitbucket set the following environment variable
+
+    $ export GITFEATURES_REPO='bitbucket'
+
+This project defaults to using 'master' for the base branch. If you would like to configure a different base branch set the following envronment variable
+
+    $ export GITFEATURES_MASTER_BRANCH='develop'
+
 **********
 Background
 **********
