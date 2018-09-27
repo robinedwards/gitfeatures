@@ -4,6 +4,8 @@ import re
 import webbrowser
 import os
 import sys
+import six
+from six.moves import input
 
 master_branch = os.environ.get('GITFEATURES_MASTER_BRANCH', 'master')
 repo = os.environ.get('GITFEATURES_REPO', 'github')
@@ -69,7 +71,7 @@ def stable(args):
         stable_branches = _get_stable_branches()
         if len(stable_branches) > 3:
             print("you have more than 3 stable branches, shall I delete the eldest one? [y/n]")  # noqa
-            if raw_input().decode('utf-8').lower() == 'y':
+            if input().lower() == 'y':
                 branch = stable_branches[0]
                 _call(["git", "push", "origin", "--delete", branch])
                 _call(["git", "branch", "-D", branch])
@@ -95,7 +97,7 @@ def pullrequest(args):
         print("Your branch is behind origin/{} so cannot be automatically merged.".format(master_branch))  # noqa
         print(commits)
         print("Do you wish to update and merge {} (If conflicts occur, you will be able to fix them)? [y/n]".format(master_branch))  # noqa
-        if raw_input().decode('utf-8').lower() == 'y':
+        if input().lower() == 'y':
             _call(['git', 'checkout', master_branch])
             _call(['git', 'pull'])
             _call(['git', 'checkout', branch])
@@ -117,7 +119,7 @@ def pullrequest(args):
         print("You have unpushed commits:")
         print(commits)
         print("Push commits to origin [y/n]")
-        if raw_input().decode('utf-8').lower() == 'y':
+        if input().lower() == 'y':
             _call(['git', 'push', 'origin', branch + ':' + branch])
 
     origin = _call(["git", "config", "--get", "remote.origin.url"])
