@@ -10,6 +10,9 @@ from six.moves import input
 master_branch = os.environ.get('GITFEATURES_MASTER_BRANCH', 'master')
 repo = os.environ.get('GITFEATURES_REPO', 'github')
 
+master_branch = os.environ.get('GITFEATURES_MASTER_BRANCH', 'master')
+repo = os.environ.get('GITFEATURES_REPO', 'github')
+
 
 def _call(args):
     try:
