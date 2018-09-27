@@ -13,6 +13,9 @@ setup(
     packages=['gitfeatures'],
     license="MIT",
     long_description=long_description,
+    install_requires=[
+        'six'
+    ],
     scripts=[
         'scripts/git-feature',
         'scripts/git-hotfix',
