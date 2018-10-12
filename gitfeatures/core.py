@@ -106,7 +106,7 @@ def pullrequest(args):
             _call(['git', 'checkout', branch])
             try:
                 print("git merge {}".format(master_branch))
-                output = check_output(['git', 'merge', master_branch])
+                output = check_output(['git', 'merge', master_branch]).decode('utf-8')
                 print(output)
                 print("Congratulations, successfully merged {}".format(master_branch))
             except CalledProcessError as e:
@@ -158,9 +158,9 @@ def _branch_exists(name):
 def _get_stable_branches():
     _call(["git", "remote", "update", "origin"])
     try:
-        branch_list = check_output("git branch -r | grep -e '\/stable_\d\d\d\d\d\d\d\d'", shell=True).strip()  # noqa
+        branch_list = check_output("git branch -r | grep -e '\/stable_\d\d\d\d\d\d\d\d'", shell=True).decode('utf-8').strip()  # noqa
         branch_list = branch_list.split('\n')
-        branch_list = map(lambda it: it.split('/')[1].strip(), branch_list)
+        branch_list = list(map(lambda it: it.split('/')[1].strip(), branch_list))
 
         return branch_list
     except CalledProcessError:
