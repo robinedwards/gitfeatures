@@ -9,9 +9,7 @@ from six.moves import input
 
 master_branch = os.environ.get('GITFEATURES_MASTER_BRANCH', 'master')
 repo = os.environ.get('GITFEATURES_REPO', 'github')
-
-master_branch = os.environ.get('GITFEATURES_MASTER_BRANCH', 'master')
-repo = os.environ.get('GITFEATURES_REPO', 'github')
+merge_strategy = os.environ.get('GITFEATURES_STRATEGY', 'merge')
 
 
 def _call(args):
@@ -97,18 +95,18 @@ def pullrequest(args):
     _call(['git', 'remote', 'update', 'origin'])
     commits = _call(['git', 'log', '--oneline', '^' + branch, 'origin/{}'.format(master_branch)])
     if commits:
-        print("Your branch is behind origin/{} so cannot be automatically merged.".format(master_branch))  # noqa
+        print("Your branch is behind origin/{} so cannot be automatically {}d.".format(merge_strategy, master_branch))  # noqa
         print(commits)
-        print("Do you wish to update and merge {} (If conflicts occur, you will be able to fix them)? [y/n]".format(master_branch))  # noqa
+        print("Do you wish to update and {} {} (If conflicts occur, you will be able to fix them)? [y/n]".format(merge_strategy, master_branch))  # noqa
         if input().lower() == 'y':
             _call(['git', 'checkout', master_branch])
             _call(['git', 'pull'])
             _call(['git', 'checkout', branch])
             try:
-                print("git merge {}".format(master_branch))
-                output = check_output(['git', 'merge', master_branch]).decode('utf-8')
+                print("git {} {}".format(merge_strategy, master_branch))
+                output = check_output(['git', merge_strategy, master_branch]).decode('utf-8')
                 print(output)
-                print("Congratulations, successfully merged {}".format(master_branch))
+                print("Congratulations, successfully {}d {}".format(merge_strategy, master_branch))
             except CalledProcessError as e:
                 if 'CONFLICT' in e.output:
                     err =  e.output + "\n\nUnlucky! You have work to do. Fix the above conflicts and run git pullrequest again"  # noqa

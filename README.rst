@@ -28,6 +28,10 @@ This project defaults to using 'master' for the base branch. If you would like t
 
     $ export GITFEATURES_MASTER_BRANCH='develop'
 
+This project defaults to using 'merge' strategy for pre-PR automation. If you would like to configure a rebase strategy set the following envronment variable
+
+    $ export GITFEATURES_STRATEGY='rebase'
+
 **********
 Background
 **********
@@ -63,7 +67,6 @@ will create a branch called stable_YYYYMMDD
 Or if you wish to switch to the current latest stable branch
 
     $ git stable
-
 
 *********
 Hot fixes
