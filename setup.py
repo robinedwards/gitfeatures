@@ -9,7 +9,7 @@ except:
 
 setup(
     name="gitfeatures",
-    version="0.0.5",
+    version="0.0.6",
     packages=['gitfeatures'],
     license="MIT",
     long_description=long_description,
