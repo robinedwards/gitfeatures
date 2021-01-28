@@ -4,7 +4,6 @@ import re
 import webbrowser
 import os
 import sys
-import six
 from six.moves import input
 
 master_branch = os.environ.get('GITFEATURES_MASTER_BRANCH', 'master')
@@ -21,9 +20,12 @@ def _call(args):
 
 def new_feature(name, prefix):
     name = re.sub('\W', '_', name)
-    if _current_branch() != master_branch:
+    original_branch = _current_branch()
+    if original_branch != master_branch:
         print(_current_branch(), master_branch)
-        sys.exit(__name__ + ": you may only start {} from {} branch".format(prefix, master_branch))  # noqa
+        print("You aren't on your main {} branch. Are you sure you wish to create a branch from {}? [y/n]".format(master_branch, original_branch))  # noqa
+        if input().lower() != 'y':
+            sys.exit("Ok, Exiting")  # noqa
 
     _call(["git", "remote", "update", "origin"])
     new_branch = "%s_%s" % (prefix, name)
@@ -131,13 +133,15 @@ def pullrequest(args):
     else:
         webbrowser.open_new_tab(url)
 
+
 def _get_pullrequest_url(name, branch):
 
     if repo == 'github':
         url = "https://github.com/" + name + "/pull/new/" + branch
     elif repo == 'bitbucket':
-        url = "https://bitbucket.org/" + name + "/pull-requests/new?t=1&source=" + branch
+        url = "https://bitbucket.org/" + name + "/pull-requests/new?t=1&source=" + branch  # noqa
     return url
+
 
 def _current_branch():
     output = _call(["git", "branch"])
