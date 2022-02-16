@@ -1,6 +1,6 @@
-===========
+============
 git features
-===========
+============
 
 git helper scripts for managing feature branches and issuing pull requests
 
@@ -8,12 +8,18 @@ git helper scripts for managing feature branches and issuing pull requests
 Installation
 ************
 
+::
+
     $ pip install git+git://github.com/robinedwards/gitfeatures.git
 
 Install for development:
 
+::
+
     $ git clone git://github.com/robinedwards/gitfeatures.git
     $ cd gitfeatures
+    $ pip install -r requirements-dev.txt
+    $ pre-commit install
     $ python setup.py develop
 
 *************
@@ -42,7 +48,7 @@ These scripts are designed to follow the github git work flow http://scottchacon
 Features
 ********
 
-Create a new feature (create a new local and remote branch prefixed 'feature_')
+Create a new feature (create a new local and remote branch prefixed 'feature')
 
     $ git feature new html_pruning
 
@@ -60,13 +66,13 @@ Or if your not currently working on the feature branch
 
 Or if you wish to create a stable branch from a specific checkout
 
-    $ git stable new
+    $ git stable|hotfix|release new
 
-will create a branch called stable_YYYYMMDD
+will create a branch called stable|hotfix|release_YYYYMMDD
 
-Or if you wish to switch to the current latest stable branch
+Or if you wish to switch to the current latest stable|hotfix|release branch
 
-    $ git stable
+    $ git stable|hotfix|release
 
 *********
 Hot fixes
