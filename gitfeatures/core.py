@@ -72,29 +72,41 @@ def finish_feature(name, prefix):
         _call(["git", "branch", "-D", branch])
 
 
-def stable(args):
+def _branch_func(branch_type, args):
     if len(args) > 0 and args[0] == "new":
         date = datetime.datetime.now()
-        new_branch = "stable_{}".format(date.strftime("%Y%m%d"))
+        new_branch = "{}_{}".format(branch_type, date.strftime("%Y%m%d"))
 
         _call(["git", "checkout", "-b", new_branch])
         _call(["git", "push", "-u", "origin", new_branch + ":" + new_branch])
 
-        stable_branches = _get_stable_branches()
-        if len(stable_branches) > 3:
-            print("you have more than 3 stable branches, shall I delete the eldest one? [y/n]")  # noqa
+        branches = _get_branches(branch_type)
+        if len(branches) > 3:
+            print(f"you have more than 3 {branch_type} branches, shall I delete the eldest one? [y/n]")  # noqa
             if input().lower() == "y":
-                branch = stable_branches[0]
+                branch = branches[0]
                 _call(["git", "push", "origin", "--delete", branch])
                 _call(["git", "branch", "-D", branch])
     else:
-        # checkout the latest stable branch
-        stable_branches = _get_stable_branches()
-        if stable_branches:
-            branch = stable_branches[-1]
+        # checkout the latest branch
+        branches = _get_branches(branch_type)
+        if branches:
+            branch = branches[-1]
             _call(["git", "checkout", branch])
         else:
-            print("No stable branches")
+            print(f"No {branch_type} branches")
+
+
+def stable(args):
+    return _branch_func("stable", args)
+
+
+def hotfix(args):
+    return _branch_func("hotfix", args)
+
+
+def release(args):
+    return _branch_func("release", args)
 
 
 def pullrequest(args):
@@ -175,12 +187,12 @@ def _branch_exists(name):
     return 1 if re.search(r"" + name + "$", branch_list, flags=re.M) else 0
 
 
-def _get_stable_branches():
+def _get_branches(branch_type):
     _call(["git", "remote", "update", "origin"])
     try:
         branch_list = (
             check_output(
-                "git branch -r | grep -e '\/stable_\d\d\d\d\d\d\d\d'",  # noqa
+                f"git branch -r | grep -e '\/{branch_type}_\d\d\d\d\d\d\d\d'",  # noqa
                 shell=True,
             )
             .decode("utf-8")
