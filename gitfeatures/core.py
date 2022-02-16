@@ -208,7 +208,8 @@ def _get_branches(branch_type):
 
 def run(prefix, args):
     if len(args) and args[0].lower() == "new":
-        if prefix == "releasecandidate":
+        allowed_branch_types = ["releasecandidate", "stable", "release", "hotfix"]
+        if prefix in allowed_branch_types:
             if len(args) == 2:
                 new_feature(args[1], prefix)
             else:
