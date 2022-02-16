@@ -1,6 +1,6 @@
 #!/usr/bin/env python
-import gitfeatures
 import sys
 
+import gitfeatures
 
-gitfeatures.run('feature', sys.argv[1:])
+gitfeatures.run("feature", sys.argv[1:])

@@ -1,30 +1,35 @@
-from subprocess import check_output, CalledProcessError
-import datetime
-import re
-import webbrowser
 import os
+import re
 import sys
+import datetime
+import webbrowser
+from subprocess import CalledProcessError, check_output
+
 from six.moves import input
 
-master_branch = os.environ.get('GITFEATURES_MASTER_BRANCH', 'master')
-repo = os.environ.get('GITFEATURES_REPO', 'github')
-merge_strategy = os.environ.get('GITFEATURES_STRATEGY', 'merge')
+master_branch = os.environ.get("GITFEATURES_MASTER_BRANCH", "master")
+repo = os.environ.get("GITFEATURES_REPO", "github")
+merge_strategy = os.environ.get("GITFEATURES_STRATEGY", "merge")
 
 
 def _call(args):
     try:
-        return check_output(args).decode('utf-8')
+        return check_output(args).decode("utf-8")
     except CalledProcessError:
         sys.exit(__name__ + ": none zero exit status executing: " + " ".join(args))  # noqa
 
 
 def new_feature(name, prefix):
-    name = re.sub('\W', '_', name)
+    name = re.sub(r"\W", "_", name)
     original_branch = _current_branch()
     if original_branch != master_branch:
         print(_current_branch(), master_branch)
-        print("You aren't on your main {} branch. Are you sure you wish to create a branch from {}? [y/n]".format(master_branch, original_branch))  # noqa
-        if input().lower() != 'y':
+        print(
+            "You aren't on your main {} branch. Are you sure you wish to create a branch from {}? [y/n]".format(
+                master_branch, original_branch
+            )
+        )  # noqa
+        if input().lower() != "y":
             sys.exit("Ok, Exiting")  # noqa
 
     _call(["git", "remote", "update", "origin"])
@@ -41,7 +46,7 @@ def finish_feature(name, prefix):
     cur_branch = _current_branch()
 
     if name:
-        branch = prefix + '_' + name
+        branch = prefix + "_" + name
         if branch == cur_branch:
             _call(["git", "checkout", master_branch])
     elif cur_branch != master_branch:
@@ -52,40 +57,56 @@ def finish_feature(name, prefix):
 
     _call(["git", "remote", "update", "origin"])
 
-    commits = _call(["git", "log", '--oneline', branch, '^origin/{}'.format(master_branch)])
+    commits = _call(["git", "log", "--oneline", branch, "^origin/{}".format(master_branch)])
     if commits:
         sys.exit(
-            __name__ + ": " + branch
-            + " contains commits that are not in {}:\n".format(master_branch) + commits
-            + "\nraise a pull request and get them merged in.")
+            __name__
+            + ": "
+            + branch
+            + " contains commits that are not in {}:\n".format(master_branch)
+            + commits
+            + "\nraise a pull request and get them merged in."
+        )
     else:
         _call(["git", "push", "origin", ":" + branch])
         _call(["git", "branch", "-D", branch])
 
 
-def stable(args):
-    if (len(args) > 0 and args[0] == 'new'):
+def _branch_func(branch_type, args):
+    if len(args) > 0 and args[0] == "new":
         date = datetime.datetime.now()
-        new_branch = 'stable_{}'.format(date.strftime('%Y%m%d'))
+        new_branch = "{}_{}".format(branch_type, date.strftime("%Y%m%d"))
 
         _call(["git", "checkout", "-b", new_branch])
         _call(["git", "push", "-u", "origin", new_branch + ":" + new_branch])
 
-        stable_branches = _get_stable_branches()
-        if len(stable_branches) > 3:
-            print("you have more than 3 stable branches, shall I delete the eldest one? [y/n]")  # noqa
-            if input().lower() == 'y':
-                branch = stable_branches[0]
+        branches = _get_branches(branch_type)
+        if len(branches) > 3:
+            print(f"you have more than 3 {branch_type} branches, shall I delete the eldest one? [y/n]")  # noqa
+            if input().lower() == "y":
+                branch = branches[0]
                 _call(["git", "push", "origin", "--delete", branch])
                 _call(["git", "branch", "-D", branch])
     else:
-        # checkout the latest stable branch
-        stable_branches = _get_stable_branches()
-        if stable_branches:
-            branch = stable_branches[-1]
+        # checkout the latest branch
+        branches = _get_branches(branch_type)
+        if branches:
+            branch = branches[-1]
             _call(["git", "checkout", branch])
         else:
-            print("No stable branches")
+            print(f"No {branch_type} branches")
+
+
+def stable(args):
+    return _branch_func("stable", args)
+
+
+def hotfix(args):
+    return _branch_func("hotfix", args)
+
+
+def release(args):
+    return _branch_func("release", args)
 
 
 def pullrequest(args):
@@ -94,41 +115,50 @@ def pullrequest(args):
         sys.exit(__name__ + ": can't issue pull requests on {}".format(master_branch))
 
     # check its up to date with remote master if not pull
-    _call(['git', 'remote', 'update', 'origin'])
-    commits = _call(['git', 'log', '--oneline', '^' + branch, 'origin/{}'.format(master_branch)])
+    _call(["git", "remote", "update", "origin"])
+    commits = _call(["git", "log", "--oneline", "^" + branch, "origin/{}".format(master_branch)])
     if commits:
-        print("Your branch is behind origin/{} so cannot be automatically {}d.".format(merge_strategy, master_branch))  # noqa
+        print(
+            "Your branch is behind origin/{} so cannot be automatically {}d.".format(merge_strategy, master_branch)
+        )  # noqa
         print(commits)
-        print("Do you wish to update and {} {} (If conflicts occur, you will be able to fix them)? [y/n]".format(merge_strategy, master_branch))  # noqa
-        if input().lower() == 'y':
-            _call(['git', 'checkout', master_branch])
-            _call(['git', 'pull'])
-            _call(['git', 'checkout', branch])
+        print(
+            "Do you wish to update and {} {} (If conflicts occur, you will be able to fix them)? [y/n]".format(
+                merge_strategy, master_branch
+            )
+        )  # noqa
+        if input().lower() == "y":
+            _call(["git", "checkout", master_branch])
+            _call(["git", "pull"])
+            _call(["git", "checkout", branch])
             try:
                 print("git {} {}".format(merge_strategy, master_branch))
-                output = check_output(['git', merge_strategy, master_branch]).decode('utf-8')
+                output = check_output(["git", merge_strategy, master_branch]).decode("utf-8")
                 print(output)
                 print("Congratulations, successfully {}d {}".format(merge_strategy, master_branch))
             except CalledProcessError as e:
-                if 'CONFLICT' in e.output:
-                    err =  e.output + "\n\nUnlucky! You have work to do. Fix the above conflicts and run git pullrequest again"  # noqa
+                if "CONFLICT" in e.output:
+                    err = (
+                        e.output
+                        + "\n\nUnlucky! You have work to do. Fix the above conflicts and run git pullrequest again"
+                    )  # noqa
                     sys.exit(err)
                 else:
-                    raise()
+                    raise ()
 
     # check if there are any unpushed commits
-    commits = _call(['git', 'log', '--oneline', branch, '^origin/' + branch])
+    commits = _call(["git", "log", "--oneline", branch, "^origin/" + branch])
     if commits:
         print("You have unpushed commits:")
         print(commits)
         print("Push commits to origin [y/n]")
-        if input().lower() == 'y':
-            _call(['git', 'push', 'origin', branch + ':' + branch])
+        if input().lower() == "y":
+            _call(["git", "push", "origin", branch + ":" + branch])
 
     origin = _call(["git", "config", "--get", "remote.origin.url"])
-    name = origin.split(':')[1].replace(".git\n", '')
+    name = origin.split(":")[1].replace(".git\n", "")
     url = _get_pullrequest_url(name, branch)
-    if (len(args) > 0 and args[0] == '--dry-run') or os.environ.get('CONSOLEONLY', False):  # noqa
+    if (len(args) > 0 and args[0] == "--dry-run") or os.environ.get("CONSOLEONLY", False):  # noqa
         print(url)
     else:
         webbrowser.open_new_tab(url)
@@ -136,16 +166,16 @@ def pullrequest(args):
 
 def _get_pullrequest_url(name, branch):
 
-    if repo == 'github':
+    if repo == "github":
         url = "https://github.com/" + name + "/pull/new/" + branch
-    elif repo == 'bitbucket':
+    elif repo == "bitbucket":
         url = "https://bitbucket.org/" + name + "/pull-requests/new?t=1&source=" + branch  # noqa
     return url
 
 
 def _current_branch():
     output = _call(["git", "branch"])
-    branch = re.search('^\* (.+)$', output, flags=re.M).group(1)
+    branch = re.search(r"^\* (.+)$", output, flags=re.M).group(1)
     if not branch:
         sys.exit(__name__ + ": unable to detect current branch")
     else:
@@ -154,15 +184,22 @@ def _current_branch():
 
 def _branch_exists(name):
     branch_list = _call(["git", "branch", "-a"])
-    return 1 if re.search('' + name + '$', branch_list, flags=re.M) else 0
+    return 1 if re.search(r"" + name + "$", branch_list, flags=re.M) else 0
 
 
-def _get_stable_branches():
+def _get_branches(branch_type):
     _call(["git", "remote", "update", "origin"])
     try:
-        branch_list = check_output("git branch -r | grep -e '\/stable_\d\d\d\d\d\d\d\d'", shell=True).decode('utf-8').strip()  # noqa
-        branch_list = branch_list.split('\n')
-        branch_list = list(map(lambda it: it.split('/')[1].strip(), branch_list))
+        branch_list = (
+            check_output(
+                f"git branch -r | grep -e '\/{branch_type}_\d\d\d\d\d\d\d\d'",  # noqa
+                shell=True,
+            )
+            .decode("utf-8")
+            .strip()
+        )
+        branch_list = branch_list.split("\n")
+        branch_list = list(map(lambda it: it.split("/")[1].strip(), branch_list))
 
         return branch_list
     except CalledProcessError:
@@ -170,8 +207,9 @@ def _get_stable_branches():
 
 
 def run(prefix, args):
-    if len(args) and args[0].lower() == 'new':
-        if prefix == 'releasecandidate':
+    if len(args) and args[0].lower() == "new":
+        allowed_branch_types = ["releasecandidate", "stable", "release", "hotfix"]
+        if prefix in allowed_branch_types:
             if len(args) == 2:
                 new_feature(args[1], prefix)
             else:
@@ -181,7 +219,7 @@ def run(prefix, args):
             new_feature(args[1], prefix)
         else:
             sys.exit("Usage: git %s new <%s_name>" % (prefix, prefix))
-    elif len(args) and args[0].lower() == 'finish':
+    elif len(args) and args[0].lower() == "finish":
         if len(args) == 1:
             finish_feature(None, prefix)
         elif len(args) == 2:

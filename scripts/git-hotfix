@@ -1,6 +1,6 @@
 #!/usr/bin/env python
-import gitfeatures
 import sys
 
+import gitfeatures
 
-gitfeatures.run('hotfix', sys.argv[1:])
+gitfeatures.hotfix(sys.argv[1:])

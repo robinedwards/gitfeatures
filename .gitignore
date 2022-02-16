@@ -1,3 +1,6 @@
 .python-version
 *.swp
 *.swo
+.direnv/
+.envrc
+gitfeatures.egg-info/

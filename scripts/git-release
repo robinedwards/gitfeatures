@@ -3,4 +3,4 @@ import sys
 
 import gitfeatures
 
-gitfeatures.stable(sys.argv[1:])
+gitfeatures.release(sys.argv[1:])
