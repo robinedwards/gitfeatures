@@ -88,8 +88,11 @@ def finish_feature(name, prefix):
 
 def _branch_func(branch_type, args):
     if len(args) > 0 and args[0] == "new":
-        date = datetime.datetime.now()
-        branch = _get_branch_name(branch_type, date.strftime("%Y%m%d"))
+        prefix = ""
+        if len(args) == 2:
+            prefix = args[1]
+        name = "{}_{}".format(str(datetime.date.today()), prefix)
+        new_branch = _get_branch_name(branch_type, name)
 
         _call(["git", "checkout", "-b", new_branch])
         _call(["git", "push", "-u", "origin", new_branch + ":" + new_branch])
