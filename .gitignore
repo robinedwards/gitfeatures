@@ -4,3 +4,4 @@
 .direnv/
 .envrc
 gitfeatures.egg-info/
+build/
