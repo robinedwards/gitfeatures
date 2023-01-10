@@ -17,9 +17,7 @@ def _call(args):
     try:
         return check_output(args).decode("utf-8")
     except CalledProcessError:
-        sys.exit(
-            __name__ + ": none zero exit status executing: " + " ".join(args)
-        )  # noqa
+        sys.exit(__name__ + ": none zero exit status executing: " + " ".join(args))  # noqa
 
 
 def _get_branch_name(prefix, name):
@@ -44,9 +42,7 @@ def new_feature(name, prefix):
     new_branch = _get_branch_name(prefix, name)
 
     if _branch_exists(new_branch):
-        sys.exit(
-            __name__ + ": local or remote branch already exists: " + new_branch
-        )  # noqa
+        sys.exit(__name__ + ": local or remote branch already exists: " + new_branch)  # noqa
 
     _call(["git", "checkout", "-b", new_branch])
     _call(["git", "push", "-u", "origin", new_branch + ":" + new_branch])
@@ -63,15 +59,11 @@ def finish_feature(name, prefix):
         branch = cur_branch
         _call(["git", "checkout", master_branch])
     else:
-        sys.exit(
-            __name__ + ": please provide a branch name if on {}".format(master_branch)
-        )
+        sys.exit(__name__ + ": please provide a branch name if on {}".format(master_branch))
 
     _call(["git", "remote", "update", "origin"])
 
-    commits = _call(
-        ["git", "log", "--oneline", branch, "^origin/{}".format(master_branch)]
-    )
+    commits = _call(["git", "log", "--oneline", branch, "^origin/{}".format(master_branch)])
     if commits:
         sys.exit(
             __name__
@@ -99,9 +91,7 @@ def _branch_func(branch_type, args):
 
         branches = _get_branches(branch_type)
         if len(branches) > 3:
-            print(
-                f"you have more than 3 {branch_type} branches, shall I delete the eldest one? [y/n]"
-            )  # noqa
+            print(f"you have more than 3 {branch_type} branches, shall I delete the eldest one? [y/n]")  # noqa
             if input().lower() == "y":
                 branch = branches[0]
                 _call(["git", "push", "origin", "--delete", branch])
@@ -135,14 +125,10 @@ def pullrequest(args):
 
     # check its up to date with remote master if not pull
     _call(["git", "remote", "update", "origin"])
-    commits = _call(
-        ["git", "log", "--oneline", "^" + branch, "origin/{}".format(master_branch)]
-    )
+    commits = _call(["git", "log", "--oneline", "^" + branch, "origin/{}".format(master_branch)])
     if commits:
         print(
-            "Your branch is behind origin/{} so cannot be automatically {}d.".format(
-                merge_strategy, master_branch
-            )
+            "Your branch is behind origin/{} so cannot be automatically {}d.".format(master_branch, merge_strategy)
         )  # noqa
         print(commits)
         print(
@@ -156,15 +142,9 @@ def pullrequest(args):
             _call(["git", "checkout", branch])
             try:
                 print("git {} {}".format(merge_strategy, master_branch))
-                output = check_output(["git", merge_strategy, master_branch]).decode(
-                    "utf-8"
-                )
+                output = check_output(["git", merge_strategy, master_branch]).decode("utf-8")
                 print(output)
-                print(
-                    "Congratulations, successfully {}d {}".format(
-                        merge_strategy, master_branch
-                    )
-                )
+                print("Congratulations, successfully {}d {}".format(merge_strategy, master_branch))
             except CalledProcessError as e:
                 if "CONFLICT" in e.output:
                     err = (
@@ -187,9 +167,7 @@ def pullrequest(args):
     origin = _call(["git", "config", "--get", "remote.origin.url"])
     name = origin.split(":")[1].replace(".git\n", "")
     url = _get_pullrequest_url(name, branch)
-    if (len(args) > 0 and args[0] == "--dry-run") or os.environ.get(
-        "CONSOLEONLY", False
-    ):  # noqa
+    if (len(args) > 0 and args[0] == "--dry-run") or os.environ.get("CONSOLEONLY", False):  # noqa
         print(url)
     else:
         webbrowser.open_new_tab(url)
@@ -200,9 +178,7 @@ def _get_pullrequest_url(name, branch):
     if repo == "github":
         url = "https://github.com/" + name + "/pull/new/" + branch
     elif repo == "bitbucket":
-        url = (
-            "https://bitbucket.org/" + name + "/pull-requests/new?t=1&source=" + branch
-        )  # noqa
+        url = "https://bitbucket.org/" + name + "/pull-requests/new?t=1&source=" + branch  # noqa
     return url
 
 
