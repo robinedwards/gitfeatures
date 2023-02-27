@@ -146,7 +146,7 @@ def pullrequest(args):
                 print(output)
                 print("Congratulations, successfully {}d {}".format(merge_strategy, master_branch))
             except CalledProcessError as e:
-                if "CONFLICT" in e.output:
+                if b"CONFLICT" in e.output:
                     err = (
                         e.output
                         + "\n\nUnlucky! You have work to do. Fix the above conflicts and run git pullrequest again"
