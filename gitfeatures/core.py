@@ -148,8 +148,8 @@ def pullrequest(args):
             except CalledProcessError as e:
                 if b"CONFLICT" in e.output:
                     err = (
-                        e.output
-                        + "\n\nUnlucky! You have work to do. Fix the above conflicts and run git pullrequest again"
+                        e.output.decode()
+                        + " \n\nUnlucky! You have work to do. Fix the above conflicts and run git pullrequest again"
                     )  # noqa
                     sys.exit(err)
                 else:
