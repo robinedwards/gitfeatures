@@ -81,9 +81,18 @@ def finish_feature(name, prefix):
 def _branch_func(branch_type, args):
     if len(args) > 0 and args[0] == "new":
         prefix = ""
+        now = datetime.datetime.now()
+        date = now.date()
+        date_string = date.strftime("%Y%m%d")
+
         if len(args) == 2:
             prefix = args[1]
-        name = "{}_{}".format(str(datetime.date.today()), prefix)
+        else:
+            time = now.time()
+            time_string = time.strftime("%H%M%S")
+            prefix = time_string
+
+        name = "{}_{}".format(date_string, prefix)
         new_branch = _get_branch_name(branch_type, name)
 
         _call(["git", "checkout", "-b", new_branch])
@@ -91,9 +100,11 @@ def _branch_func(branch_type, args):
 
         branches = _get_branches(branch_type)
         if len(branches) > 3:
-            print(f"you have more than 3 {branch_type} branches, shall I delete the eldest one? [y/n]")  # noqa
+            branch = branches[0]
+            print(
+                f"you have more than 3 {branch_type} branches, shall I delete the eldest one ({branch})? [y/n]"
+            )  # noqa
             if input().lower() == "y":
-                branch = branches[0]
                 _call(["git", "push", "origin", "--delete", branch])
                 _call(["git", "branch", "-D", branch])
     else:
@@ -174,7 +185,6 @@ def pullrequest(args):
 
 
 def _get_pullrequest_url(name, branch):
-
     if repo == "github":
         url = "https://github.com/" + name + "/pull/new/" + branch
     elif repo == "bitbucket":
@@ -201,14 +211,14 @@ def _get_branches(branch_type):
     try:
         branch_list = (
             check_output(
-                f"git branch -r | grep -e '\/{branch_type}_\d\d\d\d\d\d\d\d'",  # noqa
+                f"git branch -r | grep -e '\/{branch_type}{seperator}\d\d\d\d\d\d\d\d'",  # noqa
                 shell=True,
             )
             .decode("utf-8")
             .strip()
         )
         branch_list = branch_list.split("\n")
-        branch_list = list(map(lambda it: it.split("/")[1].strip(), branch_list))
+        branch_list = list(map(lambda it: it.split("/", 1)[1].strip(), branch_list))
 
         return branch_list
     except CalledProcessError:
