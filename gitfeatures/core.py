@@ -11,7 +11,7 @@ master_branch = os.environ.get("GITFEATURES_MASTER_BRANCH", "master")
 seperator = os.environ.get("GITFEATURES_BRANCH_SEPERATOR", "_")
 repo = os.environ.get("GITFEATURES_REPO", "github")
 merge_strategy = os.environ.get("GITFEATURES_STRATEGY", "merge")
-fork_pr_strategy = os.environ.get("GITFEATURES_FORK_PR_STRATEGY", "private")
+fork_pr_strategy = os.environ.get("GITFEATURES_FORK_PR_STRATEGY", "")
 
 
 def _call(args):
@@ -209,7 +209,7 @@ def pullrequest(args):
 
 
 def _get_pullrequest_url(name, branch):
-    print("pullrequest", name, branch)
+    print("pullrequest", name, branch, fork_pr_strategy)
     if repo == "github":
         if fork_pr_strategy == "private":
             url = f"https://github.com/{name}/compare/{master_branch}...{branch}"
