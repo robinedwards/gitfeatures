@@ -8,27 +8,29 @@ from subprocess import CalledProcessError, check_output
 from six.moves import input
 
 master_branch = os.environ.get("GITFEATURES_MASTER_BRANCH", "master")
-seperator = os.environ.get("GITFEATURES_BRANCH_SEPERATOR", "_")
+branch_seperator = os.environ.get("GITFEATURES_BRANCH_SEPERATOR", "_")
+ticket_seperator = os.environ.get("GITFEATURES_TICKET_SEPERATOR", "_")
 repo = os.environ.get("GITFEATURES_REPO", "github")
 merge_strategy = os.environ.get("GITFEATURES_STRATEGY", "merge")
 fork_pr_strategy = os.environ.get("GITFEATURES_FORK_PR_STRATEGY", "")
+require_ticket_id = os.environ.get("GITFEATURES_REQUIRE_TICKETID", "false")
 
 
 def _call(args):
     try:
         return check_output(args).decode("utf-8")
     except CalledProcessError:
-        sys.exit(
-            __name__ + ": none zero exit status executing: " + " ".join(args)
-        )  # noqa
+        sys.exit(__name__ + ": none zero exit status executing: " + " ".join(args))  # noqa
 
 
-def _get_branch_name(prefix, name):
-    name = f"{prefix}{seperator}{name}"
-    return name
+def _get_branch_name(prefix, name, ticket_id):
+    branch_name = f"{prefix}{branch_seperator}{name}"
+    if ticket_id:
+        branch_name = f"{prefix}{branch_seperator}{ticket_id}{ticket_seperator}{name}"
+    return branch_name
 
 
-def new_feature(name, prefix):
+def new_feature(name, prefix, ticket_id):
     name = re.sub(r"\W", "_", name)
     original_branch = _current_branch()
     if original_branch != master_branch:
@@ -42,12 +44,10 @@ def new_feature(name, prefix):
             sys.exit("Ok, Exiting")  # noqa
 
     _call(["git", "remote", "update", "origin"])
-    new_branch = _get_branch_name(prefix, name)
+    new_branch = _get_branch_name(prefix, name, ticket_id)
 
     if _branch_exists(new_branch):
-        sys.exit(
-            __name__ + ": local or remote branch already exists: " + new_branch
-        )  # noqa
+        sys.exit(__name__ + ": local or remote branch already exists: " + new_branch)  # noqa
 
     _call(["git", "checkout", "-b", new_branch])
     _call(["git", "push", "-u", "origin", new_branch + ":" + new_branch])
@@ -64,15 +64,11 @@ def finish_feature(name, prefix):
         branch = cur_branch
         _call(["git", "checkout", master_branch])
     else:
-        sys.exit(
-            __name__ + ": please provide a branch name if on {}".format(master_branch)
-        )
+        sys.exit(__name__ + ": please provide a branch name if on {}".format(master_branch))
 
     _call(["git", "remote", "update", "origin"])
 
-    commits = _call(
-        ["git", "log", "--oneline", branch, "^origin/{}".format(master_branch)]
-    )
+    commits = _call(["git", "log", "--oneline", branch, "^origin/{}".format(master_branch)])
     if commits:
         sys.exit(
             __name__
@@ -145,14 +141,10 @@ def pullrequest(args):
 
     # check its up to date with remote master if not pull
     _call(["git", "remote", "update", "origin"])
-    commits = _call(
-        ["git", "log", "--oneline", "^" + branch, "origin/{}".format(master_branch)]
-    )
+    commits = _call(["git", "log", "--oneline", "^" + branch, "origin/{}".format(master_branch)])
     if commits:
         print(
-            "Your branch is behind origin/{} so cannot be automatically {}d.".format(
-                master_branch, merge_strategy
-            )
+            "Your branch is behind origin/{} so cannot be automatically {}d.".format(master_branch, merge_strategy)
         )  # noqa
         print(commits)
         print(
@@ -166,15 +158,9 @@ def pullrequest(args):
             _call(["git", "checkout", branch])
             try:
                 print("git {} {}".format(merge_strategy, master_branch))
-                output = check_output(["git", merge_strategy, master_branch]).decode(
-                    "utf-8"
-                )
+                output = check_output(["git", merge_strategy, master_branch]).decode("utf-8")
                 print(output)
-                print(
-                    "Congratulations, successfully {}d {}".format(
-                        merge_strategy, master_branch
-                    )
-                )
+                print("Congratulations, successfully {}d {}".format(merge_strategy, master_branch))
             except CalledProcessError as e:
                 if b"CONFLICT" in e.output:
                     err = (
@@ -200,9 +186,7 @@ def pullrequest(args):
     print("name", name)
     print("branch", branch)
     url = _get_pullrequest_url(name, branch)
-    if (len(args) > 0 and args[0] == "--dry-run") or os.environ.get(
-        "CONSOLEONLY", False
-    ):  # noqa
+    if (len(args) > 0 and args[0] == "--dry-run") or os.environ.get("CONSOLEONLY", False):  # noqa
         print(url)
     else:
         webbrowser.open_new_tab(url)
@@ -216,9 +200,7 @@ def _get_pullrequest_url(name, branch):
         else:
             url = "https://github.com/" + name + "/pull/new/" + branch
     elif repo == "bitbucket":
-        url = (
-            "https://bitbucket.org/" + name + "/pull-requests/new?t=1&source=" + branch
-        )  # noqa
+        url = "https://bitbucket.org/" + name + "/pull-requests/new?t=1&source=" + branch  # noqa
     return url
 
 
@@ -241,7 +223,7 @@ def _get_branches(branch_type):
     try:
         branch_list = (
             check_output(
-                f"git branch -r | grep -e '\/{branch_type}{seperator}\d\d\d\d\d\d\d\d'",  # noqa
+                f"git branch -r | grep -e '\/{branch_type}{branch_seperator}\d\d\d\d\d\d\d\d'",  # noqa
                 shell=True,
             )
             .decode("utf-8")
@@ -256,6 +238,7 @@ def _get_branches(branch_type):
 
 
 def run(prefix, args):
+    print(prefix, args, require_ticket_id)
     if len(args) and args[0].lower() == "new":
         allowed_branch_types = ["releasecandidate", "stable", "release", "hotfix"]
         if prefix in allowed_branch_types:
@@ -264,8 +247,17 @@ def run(prefix, args):
             else:
                 name = str(datetime.date.today())
                 new_feature(name, prefix)
-        elif len(args) == 2:
-            new_feature(args[1], prefix)
+        elif len(args) >= 2:
+            if len(args) > 2:
+                ticket_id = args[2]
+            else:
+                ticket_id = None
+
+            if require_ticket_id == "true":
+                if len(args) < 3:
+                    sys.exit("Usage: git %s new <%s_name> <ticket_id>" % (prefix, prefix))
+
+            new_feature(args[1], prefix, ticket_id)
         else:
             sys.exit("Usage: git %s new <%s_name>" % (prefix, prefix))
     elif len(args) and args[0].lower() == "finish":
