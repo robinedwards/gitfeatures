@@ -9,7 +9,8 @@ from six.moves import input
 
 master_branch = os.environ.get("GITFEATURES_MASTER_BRANCH", "master")
 branch_seperator = os.environ.get("GITFEATURES_BRANCH_SEPERATOR", "_")
-ticket_seperator = os.environ.get("GITFEATURES_TICKET_SEPERATOR", "_")
+ticket_seperator = os.environ.get("GITFEATURES_TICKET_SEPERATOR", None)
+ticket_prefix = os.environ.get("GITFEATURES_TICKET_PREFIX", "")
 repo = os.environ.get("GITFEATURES_REPO", "github")
 merge_strategy = os.environ.get("GITFEATURES_STRATEGY", "merge")
 fork_pr_strategy = os.environ.get("GITFEATURES_FORK_PR_STRATEGY", "")
@@ -26,6 +27,9 @@ def _call(args):
 def _get_branch_name(prefix, name, ticket_id):
     branch_name = f"{prefix}{branch_seperator}{name}"
     if ticket_id:
+        if ticket_prefix:
+            if not ticket_id.startswith(ticket_prefix):
+                ticket_id = f"{ticket_prefix}{ticket_id}"
         branch_name = f"{prefix}{branch_seperator}{ticket_id}{ticket_seperator}{name}"
     return branch_name
 
