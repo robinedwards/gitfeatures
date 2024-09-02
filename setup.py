@@ -5,7 +5,7 @@ long_description = readme
 
 setup(
     name="gitfeatures",
-    version="0.1.6",
+    version="0.1.7",
     packages=["gitfeatures"],
     license="MIT",
     long_description=long_description,
