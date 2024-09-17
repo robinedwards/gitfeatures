@@ -24,7 +24,7 @@ def _call(args):
         sys.exit(__name__ + ": none zero exit status executing: " + " ".join(args))  # noqa
 
 
-def _get_branch_name(prefix, name, ticket_id):
+def _get_branch_name(prefix, name, ticket_id=None):
     branch_name = f"{prefix}{branch_seperator}{name}"
     if ticket_id:
         if ticket_prefix:
