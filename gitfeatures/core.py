@@ -242,7 +242,6 @@ def _get_branches(branch_type):
 
 
 def run(prefix, args):
-    print(prefix, args, require_ticket_id)
     if len(args) and args[0].lower() == "new":
         allowed_branch_types = ["releasecandidate", "stable", "release", "hotfix"]
         if prefix in allowed_branch_types:
