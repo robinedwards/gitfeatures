@@ -5,16 +5,19 @@ import datetime
 import webbrowser
 from subprocess import CalledProcessError, check_output
 
-from six.moves import input
-
-master_branch = os.environ.get("GITFEATURES_MASTER_BRANCH", "master")
+master_branch = os.environ.get("GITFEATURES_MASTER_BRANCH", "main")
 branch_seperator = os.environ.get("GITFEATURES_BRANCH_SEPERATOR", "_")
-ticket_seperator = os.environ.get("GITFEATURES_TICKET_SEPERATOR", None)
+ticket_seperator = os.environ.get("GITFEATURES_TICKET_SEPERATOR", branch_seperator)
 ticket_prefix = os.environ.get("GITFEATURES_TICKET_PREFIX", "")
 repo = os.environ.get("GITFEATURES_REPO", "github")
 merge_strategy = os.environ.get("GITFEATURES_STRATEGY", "merge")
 fork_pr_strategy = os.environ.get("GITFEATURES_FORK_PR_STRATEGY", "")
 require_ticket_id = os.environ.get("GITFEATURES_REQUIRE_TICKETID", "false")
+
+
+def _debug(message):
+    if str(os.environ.get("GITFEATURES_DEBUG", "")).lower() in ("1", "true", "yes", "on"):  # noqa
+        print(f"[gitfeatures] {message}")
 
 
 def _call(args):
@@ -34,8 +37,9 @@ def _get_branch_name(prefix, name, ticket_id=None):
     return branch_name
 
 
-def new_feature(name, prefix, ticket_id):
-    name = re.sub(r"\W", "_", name)
+def new_feature(name, prefix, ticket_id=None):
+    # Allow alnum, underscore, hyphen, and slash in branch inputs
+    name = re.sub(r"[^\w\-/]", "_", name)
     original_branch = _current_branch()
     if original_branch != master_branch:
         print(_current_branch(), master_branch)
@@ -48,7 +52,30 @@ def new_feature(name, prefix, ticket_id):
             sys.exit("Ok, Exiting")  # noqa
 
     _call(["git", "remote", "update", "origin"])
-    new_branch = _get_branch_name(prefix, name, ticket_id)
+    # Support input names like 'feature/eng-123-some-description'
+    # If the provided name already starts with '<prefix>/' treat it as a full branch path
+    if name.lower().startswith(prefix.lower() + "/"):
+        rest = name.split("/", 1)[1]
+        parsed_branch = None
+        # Optionally normalize ticket id using env-provided prefix and separator
+        if ticket_seperator and ticket_prefix:
+            pattern = re.compile(
+                r"^(" + re.escape(ticket_prefix) + r")(\d+)" + re.escape(ticket_seperator) + r"(.*)$",
+                re.IGNORECASE,
+            )
+            m = pattern.match(rest)
+            if m:
+                number = m.group(2)
+                slug = m.group(3)
+                normalized_ticket = f"{ticket_prefix}{number}"
+                parsed_branch = f"{prefix}/{normalized_ticket}{ticket_seperator}{slug}"
+                _debug(
+                    f"Detected ticket in input. normalized_ticket={normalized_ticket}, slug={slug}, branch={parsed_branch}"
+                )
+        new_branch = parsed_branch if parsed_branch else name
+    else:
+        new_branch = _get_branch_name(prefix, name, ticket_id)
+    _debug(f"Creating new branch: {new_branch}")
 
     if _branch_exists(new_branch):
         sys.exit(__name__ + ": local or remote branch already exists: " + new_branch)  # noqa
@@ -173,7 +200,7 @@ def pullrequest(args):
                     )  # noqa
                     sys.exit(err)
                 else:
-                    raise ()
+                    raise
 
     # check if there are any unpushed commits
     commits = _call(["git", "log", "--oneline", branch, "^origin/" + branch])
@@ -241,6 +268,19 @@ def _get_branches(branch_type):
         return []
 
 
+def _name_has_embedded_ticket(candidate_name, prefix):
+    if not (ticket_seperator and ticket_prefix):
+        return False
+    if not candidate_name.lower().startswith(prefix.lower() + "/"):
+        return False
+    rest = candidate_name.split("/", 1)[1]
+    pattern = re.compile(
+        r"^(" + re.escape(ticket_prefix) + r")(\d+)" + re.escape(ticket_seperator) + r"",
+        re.IGNORECASE,
+    )
+    return bool(pattern.match(rest))
+
+
 def run(prefix, args):
     if len(args) and args[0].lower() == "new":
         allowed_branch_types = ["releasecandidate", "stable", "release", "hotfix"]
@@ -257,7 +297,7 @@ def run(prefix, args):
                 ticket_id = None
 
             if require_ticket_id == "true":
-                if len(args) < 3:
+                if len(args) < 3 and not _name_has_embedded_ticket(args[1], prefix):
                     sys.exit("Usage: git %s new <%s_name> <ticket_id>" % (prefix, prefix))
 
             new_feature(args[1], prefix, ticket_id)
@@ -272,3 +312,28 @@ def run(prefix, args):
             sys.exit("Usage: git %s finish [%s_name]" % (prefix, prefix))
     else:
         sys.exit("Usage: git %s <new/finish> <%s_name>" % (prefix, prefix))
+
+
+# Console script entry points for packaging
+def cli_feature():
+    return run("feature", sys.argv[1:])
+
+
+def cli_hotfix():
+    return hotfix(sys.argv[1:])
+
+
+def cli_release():
+    return release(sys.argv[1:])
+
+
+def cli_stable():
+    return stable(sys.argv[1:])
+
+
+def cli_pullrequest():
+    return pullrequest(sys.argv[1:])
+
+
+def cli_releasecandidate():
+    return run("releasecandidate", sys.argv[1:])
