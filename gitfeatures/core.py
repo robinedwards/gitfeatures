@@ -252,9 +252,10 @@ def _branch_exists(name):
 def _get_branches(branch_type):
     _call(["git", "remote", "update", "origin"])
     try:
+        pattern = rf"/{branch_type}{branch_seperator}[0-9]{{8}}"
         branch_list = (
             check_output(
-                f"git branch -r | grep -e '\/{branch_type}{branch_seperator}\d\d\d\d\d\d\d\d'",  # noqa
+                f"git branch -r | grep -E '{pattern}'",
                 shell=True,
             )
             .decode("utf-8")
