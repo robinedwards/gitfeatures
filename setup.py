@@ -7,11 +7,14 @@ setup(
     name="gitfeatures",
     version="1.0.1",
     packages=["gitfeatures"],
+    package_data={"gitfeatures": ["templates/*.md"]},
     license="MIT",
     long_description=long_description,
     long_description_content_type="text/x-rst",
     python_requires=">=3.8",
-    install_requires=[],
+    install_requires=[
+        "jinja2>=3.0.0",
+    ],
     entry_points={
         "console_scripts": [
             "git-feature=gitfeatures.core:cli_feature",
