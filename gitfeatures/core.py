@@ -65,9 +65,10 @@ def _get_repo_full_name_from_origin_url(origin_url):
 def _get_changelog_path_for_branch(branch):
     """
     Return the path to the changelog file for a given branch.
-    Preserves slashes in branch names as nested directories under 'changelog/'.
+    Drops leading branch-type prefix like 'feature/' to avoid nested directories.
     """
-    return os.path.join("changelog", f"{branch}.md")
+    filename_branch = branch.split("/", 1)[1] if "/" in branch else branch
+    return os.path.join("changelog", f"{filename_branch}.md")
 
 
 def _read_changelog_body(branch):
@@ -95,23 +96,7 @@ def _get_repo_root() -> str:
         return os.getcwd()
 
 
-def _read_user_story_template() -> Optional[str]:
-    """
-    Read user-story-template.md (or path from GITFEATURES_STORY_TEMPLATE) from the repo.
-    """
-    repo_root = _get_repo_root()
-    override = os.environ.get("GITFEATURES_STORY_TEMPLATE", "").strip()
-    if override:
-        path = override if os.path.isabs(override) else os.path.join(repo_root, override)
-    else:
-        path = os.path.join(repo_root, "user-story-template.md")
-    if os.path.exists(path) and os.path.isfile(path):
-        try:
-            with open(path, "r", encoding="utf-8") as fh:
-                return fh.read()
-        except Exception as e:
-            _debug(f"Failed to read user-story-template.md: {e}")
-    return None
+""  # Story template removed; only changelog template is supported
 
 
 def _read_changelog_template() -> Optional[str]:
@@ -166,6 +151,15 @@ def _build_changelog_context(branch: str, ticket_identifier: Optional[str], line
             "title": linear_issue.get("title"),
             "description": linear_issue.get("description"),
             "url": linear_issue.get("url"),
+            "number": linear_issue.get("number"),
+            "createdAt": linear_issue.get("createdAt"),
+            "updatedAt": linear_issue.get("updatedAt"),
+            "priority": linear_issue.get("priority"),
+            "estimate": linear_issue.get("estimate"),
+            "team": linear_issue.get("team"),
+            "state": linear_issue.get("state"),
+            "assignee": linear_issue.get("assignee"),
+            "labels": linear_issue.get("labels") or [],
         }
     context = {
         "branch": branch,
@@ -230,22 +224,36 @@ def _fetch_linear_issue(team_key: str, number: int, token: str) -> Optional[Dict
     """
     endpoint = "https://api.linear.app/graphql"
     query = """
-    query Issues($teamKey: String!, $number: Int!) {
+    query Issues($teamKey: String!, $number: Float!) {
       issues(filter: { number: { eq: $number }, team: { key: { eq: $teamKey } } }, first: 1) {
         nodes {
           id
           identifier
+          number
           title
           description
           url
+          createdAt
+          updatedAt
+          priority
+          estimate
+          team { id key name }
+          state { id name type color }
+          assignee { id name displayName email }
+          labels(first: 50) { nodes { id name color } }
         }
       }
     }
     """
-    payload = {"query": query, "variables": {"teamKey": team_key, "number": number}}
+    # Linear's schema expects number as a Float
+    payload = {"query": query, "variables": {"teamKey": team_key, "number": float(number)}}
     data = json.dumps(payload).encode("utf-8")
+    # Linear expects the API key directly in the Authorization header (no 'Bearer ' prefix)
+    auth_value = (token or "").strip()
+    if auth_value.lower().startswith("bearer "):
+        auth_value = auth_value[7:].strip()
     headers = {
-        "Authorization": f"Bearer {token}",
+        "Authorization": auth_value,
         "Content-Type": "application/json",
         "User-Agent": "gitfeatures",
     }
@@ -257,11 +265,30 @@ def _fetch_linear_issue(team_key: str, number: int, token: str) -> Optional[Dict
             nodes = (((parsed or {}).get("data") or {}).get("issues") or {}).get("nodes") or []
             if nodes:
                 node = nodes[0]
+                labels_nodes = (((node or {}).get("labels") or {}).get("nodes")) or []
+                labels = [{"id": it.get("id"), "name": it.get("name"), "color": it.get("color")} for it in labels_nodes]
+                state = node.get("state") or {}
+                team = node.get("team") or {}
+                assignee = node.get("assignee") or {}
                 return {
                     "identifier": node.get("identifier"),
+                    "number": node.get("number"),
                     "title": node.get("title"),
                     "description": node.get("description") or "",
                     "url": node.get("url"),
+                    "createdAt": node.get("createdAt"),
+                    "updatedAt": node.get("updatedAt"),
+                    "priority": node.get("priority"),
+                    "estimate": node.get("estimate"),
+                    "team": {"key": team.get("key"), "name": team.get("name"), "id": team.get("id")},
+                    "state": {"name": state.get("name"), "type": state.get("type"), "color": state.get("color"), "id": state.get("id")},
+                    "assignee": {
+                        "id": assignee.get("id"),
+                        "name": assignee.get("name"),
+                        "displayName": assignee.get("displayName"),
+                        "email": assignee.get("email"),
+                    },
+                    "labels": labels,
                 }
     except urllib.error.HTTPError as e:
         try:
@@ -671,3 +698,95 @@ def cli_pullrequest():
 
 def cli_releasecandidate():
     return run("releasecandidate", sys.argv[1:])
+
+
+def _parse_args(args):
+    """
+    Minimal flag parser for preview commands.
+    Supports:
+      --branch <name>
+      --ticket <identifier>
+      --write
+      --out <path>
+    """
+    opts = {"branch": None, "ticket": None, "write": False, "out": None}
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "--branch" and i + 1 < len(args):
+            opts["branch"] = args[i + 1]
+            i += 2
+        elif a == "--ticket" and i + 1 < len(args):
+            opts["ticket"] = args[i + 1]
+            i += 2
+        elif a == "--write":
+            opts["write"] = True
+            i += 1
+        elif a == "--out" and i + 1 < len(args):
+            opts["out"] = args[i + 1]
+            i += 2
+        else:
+            print(f"Unrecognized or incomplete option: {a}")
+            sys.exit("Usage: git-changelog [--branch <name>] [--ticket <id>] [--write] [--out <path>]")
+    return opts
+
+
+def preview_changelog(args):
+    """
+    Render the changelog template using current context without creating a feature.
+    """
+    opts = _parse_args(args)
+    branch = opts["branch"] or _current_branch()
+    ticket_identifier = opts["ticket"]
+
+    # Try to detect ticket from branch if not provided, reusing branch parsing heuristics
+    detected_ticket_identifier = None
+    if ticket_identifier:
+        detected_ticket_identifier = ticket_identifier
+    else:
+        if "/" in branch:
+            rest = branch.split("/", 1)[1]
+        else:
+            rest = branch
+        if ticket_seperator and ticket_prefix:
+            pattern = re.compile(
+                r"^(" + re.escape(ticket_prefix) + r")(\d+)" + re.escape(ticket_seperator) + r"(.*)$",
+                re.IGNORECASE,
+            )
+            m = pattern.match(rest)
+            if m:
+                number = m.group(2)
+                detected_ticket_identifier = f"{ticket_prefix}{number}"
+
+    # Optional Linear fetch
+    linear_issue = None
+    linear_token = os.environ.get("LINEAR_API_KEY") or os.environ.get("LINEAR_TOKEN")
+    if linear_token and detected_ticket_identifier:
+        parsed = _extract_linear_team_and_number(detected_ticket_identifier)
+        if parsed:
+            team_key, number = parsed
+            linear_issue = _fetch_linear_issue(team_key, number, linear_token)
+
+    # Render from changelog template
+    changelog_template = _read_changelog_template()
+    if not changelog_template:
+        sys.exit("No changelog template found. Provide GITFEATURES_CHANGELOG_TEMPLATE or add changelog-template.md.")
+    context = _build_changelog_context(branch, detected_ticket_identifier, linear_issue)
+    rendered = _render_changelog_template(changelog_template, context)
+    if rendered is None:
+        sys.exit("Failed to render changelog template.")
+
+    if opts["write"]:
+        target = opts["out"] or _get_changelog_path_for_branch(branch)
+        parent = os.path.dirname(target)
+        if parent and not os.path.exists(parent):
+            os.makedirs(parent, exist_ok=True)
+        with open(target, "w", encoding="utf-8") as fh:
+            fh.write(rendered)
+        print(target)
+    else:
+        print(rendered)
+
+
+def cli_changelog():
+    return preview_changelog(sys.argv[1:])

@@ -23,6 +23,7 @@ setup(
             "git-stable=gitfeatures.core:cli_stable",
             "git-pullrequest=gitfeatures.core:cli_pullrequest",
             "git-releasecandidate=gitfeatures.core:cli_releasecandidate",
+            "git-changelog=gitfeatures.core:cli_changelog",
         ]
     },
 )

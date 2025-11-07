@@ -199,7 +199,7 @@ Notes:
 - If no Linear token is set or the issue is not found, the changelog is still created with a simple template so you can fill it in manually.
 
 Templating via Jinja2
-==============================================
+=====================
 
 - On ``git feature new`` your changelog is rendered with **Jinja2** from a template file.
 
@@ -218,32 +218,27 @@ Changelog template
   - ``issue``: generic issue dict for providers (``provider``, ``id``, ``key``, ``title``, ``description``, ``url``)
   - ``title``, ``background``, ``changes``, ``testing``: prefilled suggestions (title/background come from Linear if available)
   - ``now``: current UTC timestamp in ISO format
-- You can override the template path using ``GITFEATURES_STORY_TEMPLATE``. If relative, it is resolved against the repo root. Example:
+- If the template is missing, the tool falls back to a bundled default inside the package. If rendering fails, the changelog is created empty.
 
-  ::
+Preview without creating a feature
+----------------------------------
 
-      export GITFEATURES_STORY_TEMPLATE=.github/story-templates/backend.md
+You can render or write the changelog for the current or a specific branch without creating a feature:
 
-- If the template is missing or rendering fails, the changelog is created empty (no default fallback).
+:: 
 
-Example snippet for ``user-story-template.md``:
+  # Preview to stdout for the current branch
+  git changelog
 
-::
+  # Preview for a specific branch name
+  git changelog --branch feature/ENG-123-awesome-change
 
-  # Purpose
-  {{ title or branch }}
-  
-  # Background
-  {{ background or "" }}
-  
-  # Changelog Seed (used to prefill ./changelog/<branch>.md)
-  Title: {{ title or branch }}
-  Background:
-  {{ background or "" }}
-  Changes:
-  {{ changes or "- " }}
-  Testing:
-  {{ testing or "- " }}
+  # Provide/override the ticket id
+  git changelog --ticket ENG-123
+
+  # Write to file (defaults to changelog/<branch>.md) or specify a path
+  git changelog --write
+  git changelog --write --out /tmp/preview.md
 
 Behavior details
 ================
