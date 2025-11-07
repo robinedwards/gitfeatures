@@ -19,6 +19,7 @@ repo = os.environ.get("GITFEATURES_REPO", "github")
 merge_strategy = os.environ.get("GITFEATURES_STRATEGY", "merge")
 fork_pr_strategy = os.environ.get("GITFEATURES_FORK_PR_STRATEGY", "")
 require_ticket_id = os.environ.get("GITFEATURES_REQUIRE_TICKETID", "false")
+changelog_enabled = str(os.environ.get("GITFEATURES_CHANGELOG_ENABLED", "false")).lower() in ("1", "true", "yes", "on")
 
 
 def _debug(message):
@@ -311,7 +312,7 @@ def _create_github_pr_with_token(repo_full_name, head_branch, base_branch, body_
     """
     api_url = f"https://api.github.com/repos/{repo_full_name}/pulls"
     title = head_branch
-    payload = {"title": title, "head": head_branch, "base": base_branch}
+    payload = {"title": title, "head": head_branch, "base": base_branch, "draft": True}
     if body_text:
         payload["body"] = body_text
     data = json.dumps(payload).encode("utf-8")
@@ -401,35 +402,36 @@ def new_feature(name, prefix, ticket_id=None):
 
     _call(["git", "checkout", "-b", new_branch])
     _call(["git", "push", "-u", "origin", new_branch + ":" + new_branch])
-    # Create changelog file for this branch if not present
-    try:
-        changelog_path = _get_changelog_path_for_branch(new_branch)
-        parent_dir = os.path.dirname(changelog_path)
-        if parent_dir and not os.path.exists(parent_dir):
-            os.makedirs(parent_dir, exist_ok=True)
-        if not os.path.exists(changelog_path):
-            # Optionally fetch Linear issue to prefill context
-            linear_issue = None
-            linear_token = os.environ.get("LINEAR_API_KEY") or os.environ.get("LINEAR_TOKEN")
-            if linear_token and detected_ticket_identifier:
-                parsed = _extract_linear_team_and_number(detected_ticket_identifier)
-                if parsed:
-                    team_key, number = parsed
-                    linear_issue = _fetch_linear_issue(team_key, number, linear_token)
-            # Render changelog from dedicated changelog template
-            initial_body = ""
-            changelog_template = _read_changelog_template()
-            if changelog_template:
-                context = _build_changelog_context(new_branch, detected_ticket_identifier, linear_issue)
-                rendered = _render_changelog_template(changelog_template, context)
-                if rendered is not None:
-                    initial_body = rendered
-            # If no template or render fails, create empty file (no default)
-            with open(changelog_path, "w", encoding="utf-8") as fh:
-                fh.write(initial_body)
-            _debug(f"Created changelog file: {changelog_path}")
-    except Exception as e:
-        _debug(f"Unable to create changelog file: {e}")
+    # Create changelog file for this branch if feature is enabled and file not present
+    if changelog_enabled:
+        try:
+            changelog_path = _get_changelog_path_for_branch(new_branch)
+            parent_dir = os.path.dirname(changelog_path)
+            if parent_dir and not os.path.exists(parent_dir):
+                os.makedirs(parent_dir, exist_ok=True)
+            if not os.path.exists(changelog_path):
+                # Optionally fetch Linear issue to prefill context
+                linear_issue = None
+                linear_token = os.environ.get("LINEAR_API_KEY") or os.environ.get("LINEAR_TOKEN")
+                if linear_token and detected_ticket_identifier:
+                    parsed = _extract_linear_team_and_number(detected_ticket_identifier)
+                    if parsed:
+                        team_key, number = parsed
+                        linear_issue = _fetch_linear_issue(team_key, number, linear_token)
+                # Render changelog from dedicated changelog template
+                initial_body = ""
+                changelog_template = _read_changelog_template()
+                if changelog_template:
+                    context = _build_changelog_context(new_branch, detected_ticket_identifier, linear_issue)
+                    rendered = _render_changelog_template(changelog_template, context)
+                    if rendered is not None:
+                        initial_body = rendered
+                # If no template or render fails, create empty file (no default)
+                with open(changelog_path, "w", encoding="utf-8") as fh:
+                    fh.write(initial_body)
+                _debug(f"Created changelog file: {changelog_path}")
+        except Exception as e:
+            _debug(f"Unable to create changelog file: {e}")
 
 
 def finish_feature(name, prefix):
@@ -571,11 +573,17 @@ def pullrequest(args):
         # If a GitHub token is present, attempt to create the PR via API
         token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
         if repo == "github" and token:
-            body = _read_changelog_body(branch)
+            body = _read_changelog_body(branch) if changelog_enabled else None
             ok, resp = _create_github_pr_with_token(name, branch, master_branch, body, token)
             if ok:
                 pr_url = resp.get("html_url") or url
                 print(f"Created PR: {pr_url}")
+                # Open the created PR directly unless console-only requested
+                if not os.environ.get("CONSOLEONLY", False):
+                    try:
+                        webbrowser.open_new_tab(pr_url)
+                    except Exception:
+                        pass
                 return
             else:
                 print("Failed to create PR via API. Falling back to browser flow.")

@@ -153,11 +153,12 @@ Environment variables
 - ``GITFEATURES_REQUIRE_TICKETID``: Set to ``true`` to require a ticket id on ``feature new``/``hotfix new``.
 - ``CONSOLEONLY``: If set, print PR URL instead of opening a browser.
 - ``GITHUB_TOKEN``: If set, PRs are created via the GitHub API instead of opening the browser. When present, if ``./changelog/<branch>.md`` exists, its contents are used as the PR description.
+- ``GITFEATURES_CHANGELOG_ENABLED``: When set to ``true`` (or ``1/yes/on``), enables changelog generation on ``git feature new`` and PR body population from the changelog on ``git pullrequest``. Default: ``false``.
 
 Changelog files
 ===============
 
-When you run ``git feature new <name>``, a ``./changelog/<branch>.md`` file is created for the new branch if it does not already exist. When creating a PR (``git pullrequest``), if a changelog file exists for the current branch and ``GITHUB_TOKEN`` is set, its contents become the PR body.
+When ``GITFEATURES_CHANGELOG_ENABLED`` is enabled and you run ``git feature new <name>``, a ``./changelog/<rest-of-branch>.md`` file is created for the new branch if it does not already exist (the leading ``feature/`` is omitted from the filename). When creating a PR (``git pullrequest``), if the flag is enabled, a changelog file exists for the current branch, and ``GITHUB_TOKEN`` is set, its contents become the PR body.
 
 Linear integration (optional)
 =============================
