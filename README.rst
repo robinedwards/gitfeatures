@@ -108,9 +108,9 @@ Then run:
 
 ::
 
-    $ git feature new feature/eng-349-fix-the-order-name-sequencing-by-replacing-with-counters-not
+    $ git feature new feature/ENG-123-description
 
-This will normalize the ticket id to ``ENG-349`` and preserve hyphens and the slash.
+This will normalize the ticket id to ``ENG-123`` and preserve hyphens and the slash.
 
 ``git hotfix``
 ==============
