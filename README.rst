@@ -152,6 +152,94 @@ Environment variables
 - ``GITFEATURES_TICKET_PREFIX``: Optional enforced prefix for ticket ids (e.g. ``PROJ-``).
 - ``GITFEATURES_REQUIRE_TICKETID``: Set to ``true`` to require a ticket id on ``feature new``/``hotfix new``.
 - ``CONSOLEONLY``: If set, print PR URL instead of opening a browser.
+- ``GITHUB_TOKEN``: If set, PRs are created via the GitHub API instead of opening the browser. When present, if ``./changelog/<branch>.md`` exists, its contents are used as the PR description.
+- ``GITFEATURES_CHANGELOG_ENABLED``: When set to ``true`` (or ``1/yes/on``), enables changelog generation on ``git feature new`` and PR body population from the changelog on ``git pullrequest``. Default: ``false``.
+
+Changelog files
+===============
+
+When ``GITFEATURES_CHANGELOG_ENABLED`` is enabled and you run ``git feature new <name>``, a ``./changelog/<rest-of-branch>.md`` file is created for the new branch if it does not already exist (the leading ``feature/`` is omitted from the filename). When creating a PR (``git pullrequest``), if the flag is enabled, a changelog file exists for the current branch, and ``GITHUB_TOKEN`` is set, its contents become the PR body.
+
+Linear integration (optional)
+=============================
+
+If you track work in Linear and your branch/ticket ids look like ``TEAM-123`` (e.g. ``ENG-123``), you can have the changelog file prefilled with the ticket's title and description.
+
+Setup:
+
+- **Set your Linear API key**:
+
+  ::
+
+      export LINEAR_API_KEY=your_linear_api_key
+
+- **Provide a ticket id**:
+  - Either pass it as the third argument to ``git feature new`` when your config requires ticket ids:
+
+    ::
+
+        git feature new my_change 123
+
+    If you configure ``GITFEATURES_TICKET_PREFIX='ENG-'``, the tool will use ``ENG-123`` as the Linear identifier.
+  - Or embed it in the name using the long form:
+
+    ::
+
+        git feature new feature/ENG-123-some-description
+
+Behavior:
+
+- On ``git feature new``, if ``LINEAR_API_KEY`` is set and a ticket id like ``ENG-123`` can be detected (either from the argument or the branch name), the tool fetches the issue from Linear and pre-populates ``./changelog/<branch>.md``:
+  - Purpose: set from the Linear issue title
+  - Background: first part of the Linear description
+  - Links: includes the Linear issue URL
+
+Notes:
+
+- Only the team key and issue number are used (e.g. ``ENG`` and ``123``).
+- If no Linear token is set or the issue is not found, the changelog is still created with a simple template so you can fill it in manually.
+
+Templating via Jinja2
+=====================
+
+- On ``git feature new`` your changelog is rendered with **Jinja2** from a template file.
+
+Changelog template
+------------------
+
+- Default path: ``changelog-template.md`` in the repo root
+- If missing, falls back to a bundled default inside the ``gitfeatures`` package (``gitfeatures/templates/changelog-template.md``).
+- Override with: ``GITFEATURES_CHANGELOG_TEMPLATE`` (absolute or repo-root-relative)
+- Variables available to the template:
+  - ``branch``: new branch name
+  - ``ticket``: detected ticket identifier (e.g. ``ENG-123``) if available
+  - ``repo_full_name``: owner/name derived from ``origin`` url
+  - ``master_branch``: base branch (default: ``main``)
+  - ``linear``: dict with ``identifier``, ``title``, ``description``, ``url`` (if available)
+  - ``issue``: generic issue dict for providers (``provider``, ``id``, ``key``, ``title``, ``description``, ``url``)
+  - ``title``, ``background``, ``changes``, ``testing``: prefilled suggestions (title/background come from Linear if available)
+  - ``now``: current UTC timestamp in ISO format
+- If the template is missing, the tool falls back to a bundled default inside the package. If rendering fails, the changelog is created empty.
+
+Preview without creating a feature
+----------------------------------
+
+You can render or write the changelog for the current or a specific branch without creating a feature:
+
+:: 
+
+  # Preview to stdout for the current branch
+  git changelog
+
+  # Preview for a specific branch name
+  git changelog --branch feature/ENG-123-awesome-change
+
+  # Provide/override the ticket id
+  git changelog --ticket ENG-123
+
+  # Write to file (defaults to changelog/<branch>.md) or specify a path
+  git changelog --write
+  git changelog --write --out /tmp/preview.md
 
 Behavior details
 ================

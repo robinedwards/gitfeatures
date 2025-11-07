@@ -4,6 +4,12 @@ import sys
 import datetime
 import webbrowser
 from subprocess import CalledProcessError, check_output
+import json
+import urllib.request
+import urllib.error
+import urllib.parse
+from typing import Optional, Tuple, Dict, Any
+import jinja2  # Airflow uses Jinja2 for templating
 
 master_branch = os.environ.get("GITFEATURES_MASTER_BRANCH", "main")
 branch_seperator = os.environ.get("GITFEATURES_BRANCH_SEPERATOR", "_")
@@ -13,6 +19,7 @@ repo = os.environ.get("GITFEATURES_REPO", "github")
 merge_strategy = os.environ.get("GITFEATURES_STRATEGY", "merge")
 fork_pr_strategy = os.environ.get("GITFEATURES_FORK_PR_STRATEGY", "")
 require_ticket_id = os.environ.get("GITFEATURES_REQUIRE_TICKETID", "false")
+changelog_enabled = str(os.environ.get("GITFEATURES_CHANGELOG_ENABLED", "false")).lower() in ("1", "true", "yes", "on")
 
 
 def _debug(message):
@@ -25,6 +32,310 @@ def _call(args):
         return check_output(args).decode("utf-8")
     except CalledProcessError:
         sys.exit(__name__ + ": none zero exit status executing: " + " ".join(args))  # noqa
+
+
+def _get_repo_full_name_from_origin_url(origin_url):
+    """
+    Extract the 'owner/repo' full name from a git remote URL (ssh or https).
+    """
+    if not origin_url:
+        return ""
+    origin_url = origin_url.strip()
+    # git@github.com:owner/repo.git
+    if origin_url.startswith("git@"):
+        try:
+            after_colon = origin_url.split(":", 1)[1]
+            return after_colon.replace(".git", "").strip()
+        except Exception:
+            return ""
+    # https://github.com/owner/repo.git or http(s) with extra path
+    try:
+        parsed = urllib.parse.urlparse(origin_url)
+        if parsed.netloc:
+            path = parsed.path.lstrip("/")
+            if path:
+                return path.replace(".git", "").strip()
+    except Exception:
+        pass
+    # Fallback: attempt split by ':' like ssh
+    if ":" in origin_url:
+        return origin_url.split(":", 1)[1].replace(".git", "").strip()
+    return origin_url.replace(".git", "").strip()
+
+
+def _get_changelog_path_for_branch(branch):
+    """
+    Return the path to the changelog file for a given branch.
+    Drops leading branch-type prefix like 'feature/' to avoid nested directories.
+    """
+    filename_branch = branch.split("/", 1)[1] if "/" in branch else branch
+    return os.path.join("changelog", f"{filename_branch}.md")
+
+
+def _read_changelog_body(branch):
+    """
+    Read the changelog file for the branch if it exists, else return None.
+    """
+    path = _get_changelog_path_for_branch(branch)
+    if os.path.exists(path) and os.path.isfile(path):
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                return fh.read()
+        except Exception as e:
+            _debug(f"Failed to read changelog file at {path}: {e}")
+    return None
+
+
+def _get_repo_root() -> str:
+    """
+    Return the absolute path to the git repository root, falling back to CWD.
+    """
+    try:
+        root = _call(["git", "rev-parse", "--show-toplevel"]).strip()
+        return root if root else os.getcwd()
+    except Exception:
+        return os.getcwd()
+
+
+""  # Story template removed; only changelog template is supported
+
+
+def _read_changelog_template() -> Optional[str]:
+    """
+    Read changelog-template.md (or path from GITFEATURES_CHANGELOG_TEMPLATE) from the repo.
+    """
+    repo_root = _get_repo_root()
+    override = os.environ.get("GITFEATURES_CHANGELOG_TEMPLATE", "").strip()
+    if override:
+        path = override if os.path.isabs(override) else os.path.join(repo_root, override)
+    else:
+        path = os.path.join(repo_root, "changelog-template.md")
+    if os.path.exists(path) and os.path.isfile(path):
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                return fh.read()
+        except Exception as e:
+            _debug(f"Failed to read changelog-template.md: {e}")
+    # Fallback to bundled default template inside the package
+    try:
+        pkg_dir = os.path.dirname(__file__)
+        bundled = os.path.join(pkg_dir, "templates", "changelog-template.md")
+        if os.path.exists(bundled) and os.path.isfile(bundled):
+            with open(bundled, "r", encoding="utf-8") as fh:
+                return fh.read()
+    except Exception as e:
+        _debug(f"Failed to read bundled changelog template: {e}")
+    return None
+
+
+def _build_changelog_context(branch: str, ticket_identifier: Optional[str], linear_issue: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Build a Jinja2 context for rendering user-story-template.md.
+    """
+    # Suggested fields
+    title = (linear_issue.get("title") if linear_issue else "") or branch
+    background = (linear_issue.get("description") if linear_issue else "") or ""
+    repo_origin = ""
+    repo_full_name = ""
+    try:
+        repo_origin = _call(["git", "config", "--get", "remote.origin.url"])
+        repo_full_name = _get_repo_full_name_from_origin_url(repo_origin)
+    except Exception:
+        pass
+    # Generic issue payload for potential multiple providers
+    issue: Dict[str, Any] = {}
+    if linear_issue:
+        issue = {
+            "provider": "linear",
+            "id": linear_issue.get("identifier"),
+            "key": linear_issue.get("identifier"),
+            "title": linear_issue.get("title"),
+            "description": linear_issue.get("description"),
+            "url": linear_issue.get("url"),
+            "number": linear_issue.get("number"),
+            "createdAt": linear_issue.get("createdAt"),
+            "updatedAt": linear_issue.get("updatedAt"),
+            "priority": linear_issue.get("priority"),
+            "estimate": linear_issue.get("estimate"),
+            "team": linear_issue.get("team"),
+            "state": linear_issue.get("state"),
+            "assignee": linear_issue.get("assignee"),
+            "labels": linear_issue.get("labels") or [],
+        }
+    context = {
+        "branch": branch,
+        "ticket": ticket_identifier,
+        "repo_origin": repo_origin.strip(),
+        "repo_full_name": repo_full_name,
+        "linear": linear_issue or {},
+        "issue": issue,
+        "title": title,
+        "background": background,
+        "changes": "- ",
+        "testing": "- ",
+        "now": datetime.datetime.utcnow().isoformat() + "Z",
+        "master_branch": master_branch,
+    }
+    return context
+
+
+def _render_changelog_template(template_text: str, context: Dict[str, Any]) -> Optional[str]:
+    """
+    Render the provided template text with Jinja2 using the given context.
+    """
+    try:
+        template = jinja2.Template(template_text, autoescape=False)
+        return template.render(**context)
+    except Exception as e:
+        _debug(f"Jinja2 render failed: {e}")
+        return None
+
+
+""  # Removed seed parsing helpers; templating now handles all initial content
+
+
+def _extract_linear_team_and_number(identifier: str) -> Optional[Tuple[str, int]]:
+    """
+    Given an identifier like 'ENG-123', return ('ENG', 123).
+    If the configured ticket_prefix is like 'ENG-' and identifier is just '123',
+    we attempt to prepend and parse.
+    """
+    if not identifier:
+        return None
+    ident = identifier.strip().upper()
+    # Normalize: if configured prefix exists and ident is digits-only, attach
+    if ticket_prefix and ident.isdigit():
+        norm_prefix = ticket_prefix.strip().upper()
+        ident = f"{norm_prefix}{ident}"
+    # Common pattern TEAM-123
+    try:
+        if "-" in ident:
+            team, num = ident.split("-", 1)
+            if team and num.isdigit():
+                return team, int(num)
+    except Exception:
+        return None
+    return None
+
+
+def _fetch_linear_issue(team_key: str, number: int, token: str) -> Optional[Dict[str, Any]]:
+    """
+    Fetch a Linear issue by team key and issue number using GraphQL.
+    Returns a dict with identifier, title, description, url on success; else None.
+    """
+    endpoint = "https://api.linear.app/graphql"
+    query = """
+    query Issues($teamKey: String!, $number: Float!) {
+      issues(filter: { number: { eq: $number }, team: { key: { eq: $teamKey } } }, first: 1) {
+        nodes {
+          id
+          identifier
+          number
+          title
+          description
+          url
+          createdAt
+          updatedAt
+          priority
+          estimate
+          team { id key name }
+          state { id name type color }
+          assignee { id name displayName email }
+          labels(first: 50) { nodes { id name color } }
+        }
+      }
+    }
+    """
+    # Linear's schema expects number as a Float
+    payload = {"query": query, "variables": {"teamKey": team_key, "number": float(number)}}
+    data = json.dumps(payload).encode("utf-8")
+    # Linear expects the API key directly in the Authorization header (no 'Bearer ' prefix)
+    auth_value = (token or "").strip()
+    if auth_value.lower().startswith("bearer "):
+        auth_value = auth_value[7:].strip()
+    headers = {
+        "Authorization": auth_value,
+        "Content-Type": "application/json",
+        "User-Agent": "gitfeatures",
+    }
+    req = urllib.request.Request(endpoint, data=data, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req) as resp:
+            resp_body = resp.read().decode("utf-8")
+            parsed = json.loads(resp_body)
+            nodes = (((parsed or {}).get("data") or {}).get("issues") or {}).get("nodes") or []
+            if nodes:
+                node = nodes[0]
+                labels_nodes = (((node or {}).get("labels") or {}).get("nodes")) or []
+                labels = [{"id": it.get("id"), "name": it.get("name"), "color": it.get("color")} for it in labels_nodes]
+                state = node.get("state") or {}
+                team = node.get("team") or {}
+                assignee = node.get("assignee") or {}
+                return {
+                    "identifier": node.get("identifier"),
+                    "number": node.get("number"),
+                    "title": node.get("title"),
+                    "description": node.get("description") or "",
+                    "url": node.get("url"),
+                    "createdAt": node.get("createdAt"),
+                    "updatedAt": node.get("updatedAt"),
+                    "priority": node.get("priority"),
+                    "estimate": node.get("estimate"),
+                    "team": {"key": team.get("key"), "name": team.get("name"), "id": team.get("id")},
+                    "state": {"name": state.get("name"), "type": state.get("type"), "color": state.get("color"), "id": state.get("id")},
+                    "assignee": {
+                        "id": assignee.get("id"),
+                        "name": assignee.get("name"),
+                        "displayName": assignee.get("displayName"),
+                        "email": assignee.get("email"),
+                    },
+                    "labels": labels,
+                }
+    except urllib.error.HTTPError as e:
+        try:
+            err_body = e.read().decode("utf-8")
+        except Exception:
+            err_body = str(e)
+        _debug(f"Linear API error: {err_body}")
+    except Exception as e:
+        _debug(f"Linear API exception: {e}")
+    return None
+
+
+# Removed inline initial changelog builder in favor of bundled Jinja2 template
+
+
+def _create_github_pr_with_token(repo_full_name, head_branch, base_branch, body_text, token):
+    """
+    Create a GitHub Pull Request using the REST API.
+    Returns (success, response_json or error_text).
+    """
+    api_url = f"https://api.github.com/repos/{repo_full_name}/pulls"
+    title = head_branch
+    payload = {"title": title, "head": head_branch, "base": base_branch, "draft": True}
+    if body_text:
+        payload["body"] = body_text
+    data = json.dumps(payload).encode("utf-8")
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "gitfeatures",
+        "Content-Type": "application/json",
+    }
+    req = urllib.request.Request(api_url, data=data, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req) as resp:
+            resp_body = resp.read().decode("utf-8")
+            parsed = json.loads(resp_body)
+            return True, parsed
+    except urllib.error.HTTPError as e:
+        try:
+            err_body = e.read().decode("utf-8")
+        except Exception:
+            err_body = str(e)
+        return False, err_body
+    except Exception as e:
+        return False, str(e)
 
 
 def _get_branch_name(prefix, name, ticket_id=None):
@@ -57,6 +368,7 @@ def new_feature(name, prefix, ticket_id=None):
     if name.lower().startswith(prefix.lower() + "/"):
         rest = name.split("/", 1)[1]
         parsed_branch = None
+        detected_ticket_identifier = None
         # Optionally normalize ticket id using env-provided prefix and separator
         if ticket_seperator and ticket_prefix:
             pattern = re.compile(
@@ -72,9 +384,17 @@ def new_feature(name, prefix, ticket_id=None):
                 _debug(
                     f"Detected ticket in input. normalized_ticket={normalized_ticket}, slug={slug}, branch={parsed_branch}"
                 )
+                detected_ticket_identifier = normalized_ticket
         new_branch = parsed_branch if parsed_branch else name
     else:
         new_branch = _get_branch_name(prefix, name, ticket_id)
+        # If a ticket_id was provided, construct the identifier for downstream use
+        detected_ticket_identifier = None
+        if ticket_id:
+            if ticket_prefix and not str(ticket_id).startswith(ticket_prefix):
+                detected_ticket_identifier = f"{ticket_prefix}{ticket_id}"
+            else:
+                detected_ticket_identifier = str(ticket_id)
     _debug(f"Creating new branch: {new_branch}")
 
     if _branch_exists(new_branch):
@@ -82,6 +402,36 @@ def new_feature(name, prefix, ticket_id=None):
 
     _call(["git", "checkout", "-b", new_branch])
     _call(["git", "push", "-u", "origin", new_branch + ":" + new_branch])
+    # Create changelog file for this branch if feature is enabled and file not present
+    if changelog_enabled:
+        try:
+            changelog_path = _get_changelog_path_for_branch(new_branch)
+            parent_dir = os.path.dirname(changelog_path)
+            if parent_dir and not os.path.exists(parent_dir):
+                os.makedirs(parent_dir, exist_ok=True)
+            if not os.path.exists(changelog_path):
+                # Optionally fetch Linear issue to prefill context
+                linear_issue = None
+                linear_token = os.environ.get("LINEAR_API_KEY") or os.environ.get("LINEAR_TOKEN")
+                if linear_token and detected_ticket_identifier:
+                    parsed = _extract_linear_team_and_number(detected_ticket_identifier)
+                    if parsed:
+                        team_key, number = parsed
+                        linear_issue = _fetch_linear_issue(team_key, number, linear_token)
+                # Render changelog from dedicated changelog template
+                initial_body = ""
+                changelog_template = _read_changelog_template()
+                if changelog_template:
+                    context = _build_changelog_context(new_branch, detected_ticket_identifier, linear_issue)
+                    rendered = _render_changelog_template(changelog_template, context)
+                    if rendered is not None:
+                        initial_body = rendered
+                # If no template or render fails, create empty file (no default)
+                with open(changelog_path, "w", encoding="utf-8") as fh:
+                    fh.write(initial_body)
+                _debug(f"Created changelog file: {changelog_path}")
+        except Exception as e:
+            _debug(f"Unable to create changelog file: {e}")
 
 
 def finish_feature(name, prefix):
@@ -213,13 +563,31 @@ def pullrequest(args):
 
     origin = _call(["git", "config", "--get", "remote.origin.url"])
     print("origin", origin)
-    name = origin.split(":")[1].replace(".git\n", "")
+    name = _get_repo_full_name_from_origin_url(origin)
     print("name", name)
     print("branch", branch)
     url = _get_pullrequest_url(name, branch)
     if (len(args) > 0 and args[0] == "--dry-run") or os.environ.get("CONSOLEONLY", False):  # noqa
         print(url)
     else:
+        # If a GitHub token is present, attempt to create the PR via API
+        token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+        if repo == "github" and token:
+            body = _read_changelog_body(branch) if changelog_enabled else None
+            ok, resp = _create_github_pr_with_token(name, branch, master_branch, body, token)
+            if ok:
+                pr_url = resp.get("html_url") or url
+                print(f"Created PR: {pr_url}")
+                # Open the created PR directly unless console-only requested
+                if not os.environ.get("CONSOLEONLY", False):
+                    try:
+                        webbrowser.open_new_tab(pr_url)
+                    except Exception:
+                        pass
+                return
+            else:
+                print("Failed to create PR via API. Falling back to browser flow.")
+                _debug(f"GitHub API error: {resp}")
         webbrowser.open_new_tab(url)
 
 
@@ -338,3 +706,95 @@ def cli_pullrequest():
 
 def cli_releasecandidate():
     return run("releasecandidate", sys.argv[1:])
+
+
+def _parse_args(args):
+    """
+    Minimal flag parser for preview commands.
+    Supports:
+      --branch <name>
+      --ticket <identifier>
+      --write
+      --out <path>
+    """
+    opts = {"branch": None, "ticket": None, "write": False, "out": None}
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "--branch" and i + 1 < len(args):
+            opts["branch"] = args[i + 1]
+            i += 2
+        elif a == "--ticket" and i + 1 < len(args):
+            opts["ticket"] = args[i + 1]
+            i += 2
+        elif a == "--write":
+            opts["write"] = True
+            i += 1
+        elif a == "--out" and i + 1 < len(args):
+            opts["out"] = args[i + 1]
+            i += 2
+        else:
+            print(f"Unrecognized or incomplete option: {a}")
+            sys.exit("Usage: git-changelog [--branch <name>] [--ticket <id>] [--write] [--out <path>]")
+    return opts
+
+
+def preview_changelog(args):
+    """
+    Render the changelog template using current context without creating a feature.
+    """
+    opts = _parse_args(args)
+    branch = opts["branch"] or _current_branch()
+    ticket_identifier = opts["ticket"]
+
+    # Try to detect ticket from branch if not provided, reusing branch parsing heuristics
+    detected_ticket_identifier = None
+    if ticket_identifier:
+        detected_ticket_identifier = ticket_identifier
+    else:
+        if "/" in branch:
+            rest = branch.split("/", 1)[1]
+        else:
+            rest = branch
+        if ticket_seperator and ticket_prefix:
+            pattern = re.compile(
+                r"^(" + re.escape(ticket_prefix) + r")(\d+)" + re.escape(ticket_seperator) + r"(.*)$",
+                re.IGNORECASE,
+            )
+            m = pattern.match(rest)
+            if m:
+                number = m.group(2)
+                detected_ticket_identifier = f"{ticket_prefix}{number}"
+
+    # Optional Linear fetch
+    linear_issue = None
+    linear_token = os.environ.get("LINEAR_API_KEY") or os.environ.get("LINEAR_TOKEN")
+    if linear_token and detected_ticket_identifier:
+        parsed = _extract_linear_team_and_number(detected_ticket_identifier)
+        if parsed:
+            team_key, number = parsed
+            linear_issue = _fetch_linear_issue(team_key, number, linear_token)
+
+    # Render from changelog template
+    changelog_template = _read_changelog_template()
+    if not changelog_template:
+        sys.exit("No changelog template found. Provide GITFEATURES_CHANGELOG_TEMPLATE or add changelog-template.md.")
+    context = _build_changelog_context(branch, detected_ticket_identifier, linear_issue)
+    rendered = _render_changelog_template(changelog_template, context)
+    if rendered is None:
+        sys.exit("Failed to render changelog template.")
+
+    if opts["write"]:
+        target = opts["out"] or _get_changelog_path_for_branch(branch)
+        parent = os.path.dirname(target)
+        if parent and not os.path.exists(parent):
+            os.makedirs(parent, exist_ok=True)
+        with open(target, "w", encoding="utf-8") as fh:
+            fh.write(rendered)
+        print(target)
+    else:
+        print(rendered)
+
+
+def cli_changelog():
+    return preview_changelog(sys.argv[1:])
