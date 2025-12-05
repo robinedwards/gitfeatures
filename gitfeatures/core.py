@@ -631,7 +631,23 @@ def _get_branches(branch_type):
         )
         branch_list = branch_list.split("\n")
         branch_list = list(map(lambda it: it.split("/", 1)[1].strip(), branch_list))
+        # Sort branches by embedded date (YYYYMMDD) and optional suffix (e.g. HHMMSS)
+        date_regex = re.compile(
+            r"^"
+            + re.escape(branch_type)
+            + re.escape(branch_seperator)
+            + r"(?P<date>\d{8})(?:"
+            + re.escape(branch_seperator)
+            + r"(?P<suffix>.+))?$"
+        )
 
+        def _sort_key(branch_name: str):
+            m = date_regex.match(branch_name)
+            if not m:
+                return ("00000000", "")
+            return (m.group("date") or "00000000", m.group("suffix") or "")
+
+        branch_list.sort(key=_sort_key)
         return branch_list
     except CalledProcessError:
         return []
