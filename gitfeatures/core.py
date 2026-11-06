@@ -337,7 +337,7 @@ def _build_changelog_context(
         "background": background,
         "changes": "- ",
         "testing": "- ",
-        "now": datetime.datetime.utcnow().isoformat() + "Z",
+        "now": datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat() + "Z",
         "master_branch": master_branch,
     }
     return context

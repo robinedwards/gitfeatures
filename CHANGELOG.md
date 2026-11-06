@@ -8,7 +8,7 @@ The format is based on Keep a Changelog, and this project adheres loosely to Sem
 
 ### Breaking
 - Default base branch changed from `master` to `main`. You can override via `GITFEATURES_MASTER_BRANCH`.
-- Dropped Python 2 support and removed the `six` dependency. Python 3.8+ is now required.
+- Dropped Python 2 support and removed the `six` dependency. Python 3.10+ is now required (3.8 and 3.9 are end-of-life).
 
 ### Added
 - Per-repository settings in a committed `.gitfeatures` file (git config format). Every `GITFEATURES_*` environment variable has a matching key; environment variables still work and take precedence, with a notice when they override a value from the file.
