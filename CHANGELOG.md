@@ -11,11 +11,13 @@ The format is based on Keep a Changelog, and this project adheres loosely to Sem
 - Dropped Python 2 support and removed the `six` dependency. Python 3.8+ is now required.
 
 ### Added
+- Per-repository settings in a committed `.gitfeatures` file (git config format). Every `GITFEATURES_*` environment variable has a matching key; environment variables still work and take precedence, with a notice when they override a value from the file.
 - Console entry points for all commands via `console_scripts` so `git feature`, `git hotfix`, etc. work when installed.
 - `pyproject.toml` with modern build system metadata.
 - Comprehensive README with full command and environment variable documentation.
 
 ### Changed
+- `GITFEATURES_REQUIRE_TICKETID` now accepts `1`, `yes` and `on` as well as `true`, like the other boolean settings.
 - `GITFEATURES_TICKET_SEPERATOR` now defaults to the value of `GITFEATURES_BRANCH_SEPERATOR` (previously could be `None`).
 - Updated README install instructions to use HTTPS and editable installs.
 - Updated script shebangs to `python3` for local direct invocation.
@@ -28,4 +30,3 @@ The format is based on Keep a Changelog, and this project adheres loosely to Sem
 - Self-referential tarball in `requirements-dev.txt`.
 
 [Unreleased]: https://github.com/robinedwards/gitfeatures/compare/v0.1.11...HEAD
-

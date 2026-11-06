@@ -26,17 +26,37 @@ Install for development:
 Configuration
 *************
 
-This project works out of the box with github. If you would like to use bitbucket set the following environment variable
+This project works out of the box with github and a ``main`` base branch. To configure it for a
+repository, commit a ``.gitfeatures`` file to the root of that repository, so everyone who works on
+it gets the same settings:
 
-    $ export GITFEATURES_REPO='bitbucket'
+::
 
-This project defaults to using 'main' for the base branch. If you would like to configure a different base branch set the following environment variable
+    [gitfeatures]
+        repo = github
+        masterBranch = develop
+        strategy = rebase
+        ticketPrefix = ENG-
+        ticketSeparator = -
+        requireTicketId = true
 
-    $ export GITFEATURES_MASTER_BRANCH='develop'
+    [changelog]
+        enabled = true
 
-This project defaults to using 'merge' strategy for pre-PR automation. If you would like to configure a rebase strategy set the following envronment variable
+The file uses git's own config format (the same as ``.git/config``) and is read with
+``git config --file .gitfeatures``. Key names are case-insensitive, and a key written without a value
+(``requireTicketId`` on its own line) means ``true``. You can edit it by hand or with git:
 
-    $ export GITFEATURES_STRATEGY='rebase'
+::
+
+    $ git config --file .gitfeatures gitfeatures.masterBranch develop
+
+Every setting can also be set with an environment variable, as before. An environment variable wins
+over the ``.gitfeatures`` file, which wins over the default. When an environment variable overrides
+a different value from the file, gitfeatures prints a notice saying so. This lets you override a
+setting for one command, for example ``GITFEATURES_MASTER_BRANCH=release git pullrequest``.
+
+See `Settings`_ for every key and environment variable.
 
 **********
 Background
@@ -97,12 +117,15 @@ Full command reference
 Linear-style input (e.g. Linear.app)
 ------------------------------------
 
-You can also pass a full branch path in the popular ``feature/ENG-123-description`` style. Set:
+You can also pass a full branch path in the popular ``feature/ENG-123-description`` style. Set this in ``.gitfeatures``:
 
 ::
 
-    export GITFEATURES_TICKET_SEPERATOR=-
-    export GITFEATURES_TICKET_PREFIX=ENG-
+    [gitfeatures]
+        ticketSeparator = -
+        ticketPrefix = ENG-
+
+(or ``GITFEATURES_TICKET_SEPERATOR=-`` and ``GITFEATURES_TICKET_PREFIX=ENG-`` in the environment).
 
 Then run:
 
@@ -139,26 +162,37 @@ Validates your branch and opens your browser to the correct PR creation URL.
 - Prompts to push unpushed commits.
 - Opens the PR page for GitHub or Bitbucket. Set ``CONSOLEONLY=1`` to print the URL only.
 
-************************
-Environment variables
-************************
+********
+Settings
+********
 
-- ``GITFEATURES_REPO``: ``github`` (default) or ``bitbucket``.
-- ``GITFEATURES_MASTER_BRANCH``: Base branch name. Default: ``main``.
-- ``GITFEATURES_STRATEGY``: ``merge`` (default) or ``rebase``.
-- ``GITFEATURES_FORK_PR_STRATEGY``: If set to ``private`` on GitHub, uses the compare view instead of the new-PR shortcut.
-- ``GITFEATURES_BRANCH_SEPERATOR``: Separator used between parts of branch names. Default: ``_``.
-- ``GITFEATURES_TICKET_SEPERATOR``: Separator between ticket id and name. Default: same as ``GITFEATURES_BRANCH_SEPERATOR``.
-- ``GITFEATURES_TICKET_PREFIX``: Optional enforced prefix for ticket ids (e.g. ``PROJ-``).
-- ``GITFEATURES_REQUIRE_TICKETID``: Set to ``true`` to require a ticket id on ``feature new``/``hotfix new``.
+Each setting can be given in the repository's ``.gitfeatures`` file or as an environment variable.
+The environment variable wins.
+
+- ``gitfeatures.repo`` / ``GITFEATURES_REPO``: ``github`` (default) or ``bitbucket``.
+- ``gitfeatures.masterBranch`` / ``GITFEATURES_MASTER_BRANCH``: Base branch name. Default: ``main``.
+- ``gitfeatures.strategy`` / ``GITFEATURES_STRATEGY``: ``merge`` (default) or ``rebase``.
+- ``gitfeatures.forkPrStrategy`` / ``GITFEATURES_FORK_PR_STRATEGY``: If set to ``private`` on GitHub, uses the compare view instead of the new-PR shortcut.
+- ``gitfeatures.branchSeparator`` / ``GITFEATURES_BRANCH_SEPERATOR``: Separator used between parts of branch names. Default: ``_``.
+- ``gitfeatures.ticketSeparator`` / ``GITFEATURES_TICKET_SEPERATOR``: Separator between ticket id and name. Default: same as the branch separator.
+- ``gitfeatures.ticketPrefix`` / ``GITFEATURES_TICKET_PREFIX``: Optional enforced prefix for ticket ids (e.g. ``PROJ-``).
+- ``gitfeatures.requireTicketId`` / ``GITFEATURES_REQUIRE_TICKETID``: Set to ``true`` to require a ticket id on ``feature new``/``hotfix new``.
+- ``gitfeatures.debug`` / ``GITFEATURES_DEBUG``: Set to ``true`` to print debug output.
+- ``changelog.enabled`` / ``GITFEATURES_CHANGELOG_ENABLED``: When ``true``, enables changelog generation on ``git feature new`` and PR body population from the changelog on ``git pullrequest``. Default: ``false``.
+
+Boolean settings accept ``true``, ``1``, ``yes`` or ``on``.
+
+These are environment variables only, because they are secrets or per-invocation switches that do not
+belong in a committed file:
+
 - ``CONSOLEONLY``: If set, print PR URL instead of opening a browser.
-- ``GITHUB_TOKEN``: If set, PRs are created via the GitHub API instead of opening the browser. When present, if ``./changelog/<branch>.md`` exists, its contents are used as the PR description.
-- ``GITFEATURES_CHANGELOG_ENABLED``: When set to ``true`` (or ``1/yes/on``), enables changelog generation on ``git feature new`` and PR body population from the changelog on ``git pullrequest``. Default: ``false``.
+- ``GITHUB_TOKEN`` (or ``GH_TOKEN``): If set, PRs are created via the GitHub API instead of opening the browser. When present, if ``./changelog/<branch>.md`` exists, its contents are used as the PR description.
+- ``LINEAR_API_KEY`` (or ``LINEAR_TOKEN``): See `Linear integration (optional)`_.
 
 Changelog files
 ===============
 
-When ``GITFEATURES_CHANGELOG_ENABLED`` is enabled and you run ``git feature new <name>``, a ``./changelog/<rest-of-branch>.md`` file is created for the new branch if it does not already exist (the leading ``feature/`` is omitted from the filename). When creating a PR (``git pullrequest``), if the flag is enabled, a changelog file exists for the current branch, and ``GITHUB_TOKEN`` is set, its contents become the PR body.
+When ``changelog.enabled`` (or ``GITFEATURES_CHANGELOG_ENABLED``) is on and you run ``git feature new <name>``, a ``./changelog/<rest-of-branch>.md`` file is created for the new branch if it does not already exist (the leading ``feature/`` is omitted from the filename). When creating a PR (``git pullrequest``), if the flag is enabled, a changelog file exists for the current branch, and ``GITHUB_TOKEN`` is set, its contents become the PR body.
 
 Linear integration (optional)
 =============================
@@ -180,7 +214,8 @@ Setup:
 
         git feature new my_change 123
 
-    If you configure ``GITFEATURES_TICKET_PREFIX='ENG-'``, the tool will use ``ENG-123`` as the Linear identifier.
+    If you configure ``ticketPrefix = ENG-`` (or ``GITFEATURES_TICKET_PREFIX='ENG-'``), the tool will use ``ENG-123`` as the Linear identifier.
+
   - Or embed it in the name using the long form:
 
     ::
@@ -226,7 +261,7 @@ Preview without creating a feature
 
 You can render or write the changelog for the current or a specific branch without creating a feature:
 
-:: 
+::
 
   # Preview to stdout for the current branch
   git changelog
@@ -244,13 +279,13 @@ You can render or write the changelog for the current or a specific branch witho
 Behavior details
 ================
 
-- Ticket handling: if ``GITFEATURES_TICKET_PREFIX`` is set and the provided ticket id does not start with it, the prefix is preprended automatically.
+- Ticket handling: if the ticket prefix is set and the provided ticket id does not start with it, the prefix is preprended automatically.
 - Branch existence checks protect against creating duplicates (local or remote).
 - ``git release``/``git stable`` detect the latest remote branch by date-based naming and check it out.
 
-********
+***********
 Development
-********
+***********
 
 ::
 

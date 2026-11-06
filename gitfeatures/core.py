@@ -1,29 +1,132 @@
 import os
 import re
 import sys
+import json
 import datetime
 import webbrowser
-from subprocess import CalledProcessError, check_output
-import json
-import urllib.request
 import urllib.error
 import urllib.parse
-from typing import Optional, Tuple, Dict, Any
+import urllib.request
+from typing import Any, Dict, Tuple, Optional
+from subprocess import STDOUT, DEVNULL, CalledProcessError, check_output
+
 import jinja2  # Airflow uses Jinja2 for templating
 
-master_branch = os.environ.get("GITFEATURES_MASTER_BRANCH", "main")
-branch_seperator = os.environ.get("GITFEATURES_BRANCH_SEPERATOR", "_")
-ticket_seperator = os.environ.get("GITFEATURES_TICKET_SEPERATOR", branch_seperator)
-ticket_prefix = os.environ.get("GITFEATURES_TICKET_PREFIX", "")
-repo = os.environ.get("GITFEATURES_REPO", "github")
-merge_strategy = os.environ.get("GITFEATURES_STRATEGY", "merge")
-fork_pr_strategy = os.environ.get("GITFEATURES_FORK_PR_STRATEGY", "")
-require_ticket_id = os.environ.get("GITFEATURES_REQUIRE_TICKETID", "false")
-changelog_enabled = str(os.environ.get("GITFEATURES_CHANGELOG_ENABLED", "false")).lower() in ("1", "true", "yes", "on")
+CONFIG_FILENAME = ".gitfeatures"
+
+# Each setting is resolved from, in order: its environment variable, its key in the repo's
+# .gitfeatures file (git-config format, read with `git config --file`), then its default.
+# (module attribute, environment variable, .gitfeatures key, default)
+SETTINGS = (
+    ("repo", "GITFEATURES_REPO", "gitfeatures.repo", "github"),
+    ("master_branch", "GITFEATURES_MASTER_BRANCH", "gitfeatures.masterBranch", "main"),
+    ("merge_strategy", "GITFEATURES_STRATEGY", "gitfeatures.strategy", "merge"),
+    ("fork_pr_strategy", "GITFEATURES_FORK_PR_STRATEGY", "gitfeatures.forkPrStrategy", ""),
+    ("branch_seperator", "GITFEATURES_BRANCH_SEPERATOR", "gitfeatures.branchSeparator", "_"),
+    # None means "same as the branch separator"
+    ("ticket_seperator", "GITFEATURES_TICKET_SEPERATOR", "gitfeatures.ticketSeparator", None),
+    ("ticket_prefix", "GITFEATURES_TICKET_PREFIX", "gitfeatures.ticketPrefix", ""),
+    ("require_ticket_id", "GITFEATURES_REQUIRE_TICKETID", "gitfeatures.requireTicketId", "false"),
+    ("debug_enabled", "GITFEATURES_DEBUG", "gitfeatures.debug", "false"),
+    ("changelog_enabled", "GITFEATURES_CHANGELOG_ENABLED", "changelog.enabled", "false"),
+)
+BOOLEAN_SETTINGS = ("require_ticket_id", "debug_enabled", "changelog_enabled")
+_TRUTHY = ("1", "true", "yes", "on")
+
+# Set by load_settings(); module-level so the rest of this module can read them as globals.
+repo = master_branch = merge_strategy = fork_pr_strategy = ""
+branch_seperator = ticket_seperator = ticket_prefix = ""
+require_ticket_id = debug_enabled = changelog_enabled = False
+
+
+def _is_truthy(value) -> bool:
+    return str(value).strip().lower() in _TRUTHY
+
+
+def _repo_config_path() -> Optional[str]:
+    """
+    Return the path of the .gitfeatures file at the root of the current repo, or None outside a repo.
+    The file does not have to exist.
+    """
+    try:
+        root = check_output(["git", "rev-parse", "--show-toplevel"], stderr=DEVNULL).decode("utf-8").strip()
+    except (CalledProcessError, OSError):
+        return None
+    return os.path.join(root, CONFIG_FILENAME) if root else None
+
+
+def _read_config_file(path: Optional[str]) -> Dict[str, str]:
+    """
+    Read a git-config formatted file into a dict keyed by lower-cased "section.name".
+    A key with no value (a bare boolean such as "enabled") reads as "true".
+    """
+    if not path or not os.path.isfile(path):
+        return {}
+    try:
+        output = check_output(["git", "config", "--file", path, "--list", "-z"], stderr=STDOUT)
+    except CalledProcessError as e:
+        sys.exit(f"{__name__}: unable to read {path}: {e.output.decode('utf-8').strip()}")
+    values = {}
+    for entry in output.decode("utf-8").split("\0"):
+        if not entry:
+            continue
+        key, sep, value = entry.partition("\n")
+        values[key.lower()] = value if sep else "true"
+    return values
+
+
+def load_settings(config_path: Optional[str] = None, environ=None) -> Dict[str, Any]:
+    """
+    Resolve every setting in SETTINGS and store it on this module.
+    Environment variables win over the .gitfeatures file at config_path, which wins over the defaults.
+    When an environment variable overrides a different value from the file, a notice goes to stderr.
+    Returns the resolved settings.
+    """
+    environ = os.environ if environ is None else environ
+    config = _read_config_file(config_path)
+    resolved: Dict[str, Any] = {}
+    for attr, env_var, key, default in SETTINGS:
+        file_value = config.get(key.lower())
+        if env_var in environ:
+            value = environ[env_var]
+            if file_value is not None and not _same_setting_value(attr, value, file_value):
+                print(
+                    f"gitfeatures: {env_var}={value!r} overrides {key} = {file_value!r} from {config_path}",
+                    file=sys.stderr,
+                )
+        elif file_value is not None:
+            value = file_value
+        else:
+            value = default
+        resolved[attr] = value
+    if resolved["ticket_seperator"] is None:
+        resolved["ticket_seperator"] = resolved["branch_seperator"]
+    for attr in BOOLEAN_SETTINGS:
+        resolved[attr] = _is_truthy(resolved[attr])
+    globals().update(resolved)
+    return resolved
+
+
+def _same_setting_value(attr, a, b) -> bool:
+    if attr in BOOLEAN_SETTINGS:
+        return _is_truthy(a) == _is_truthy(b)
+    return a == b
+
+
+def load_repo_settings() -> Dict[str, Any]:
+    """
+    Resolve settings for the repo in the current directory, including its .gitfeatures file.
+    Every command calls this before doing anything else.
+    """
+    return load_settings(_repo_config_path())
+
+
+# Environment variables and defaults only, until a command loads the repo's .gitfeatures file.
+load_settings()
 
 
 def _debug(message):
-    if str(os.environ.get("GITFEATURES_DEBUG", "")).lower() in ("1", "true", "yes", "on"):  # noqa
+    if debug_enabled:
         print(f"[gitfeatures] {message}")
 
 
@@ -128,7 +231,9 @@ def _read_changelog_template() -> Optional[str]:
     return None
 
 
-def _build_changelog_context(branch: str, ticket_identifier: Optional[str], linear_issue: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+def _build_changelog_context(
+    branch: str, ticket_identifier: Optional[str], linear_issue: Optional[Dict[str, Any]]
+) -> Dict[str, Any]:
     """
     Build a Jinja2 context for rendering user-story-template.md.
     """
@@ -267,7 +372,9 @@ def _fetch_linear_issue(team_key: str, number: int, token: str) -> Optional[Dict
             if nodes:
                 node = nodes[0]
                 labels_nodes = (((node or {}).get("labels") or {}).get("nodes")) or []
-                labels = [{"id": it.get("id"), "name": it.get("name"), "color": it.get("color")} for it in labels_nodes]
+                labels = [
+                    {"id": it.get("id"), "name": it.get("name"), "color": it.get("color")} for it in labels_nodes
+                ]
                 state = node.get("state") or {}
                 team = node.get("team") or {}
                 assignee = node.get("assignee") or {}
@@ -282,7 +389,12 @@ def _fetch_linear_issue(team_key: str, number: int, token: str) -> Optional[Dict
                     "priority": node.get("priority"),
                     "estimate": node.get("estimate"),
                     "team": {"key": team.get("key"), "name": team.get("name"), "id": team.get("id")},
-                    "state": {"name": state.get("name"), "type": state.get("type"), "color": state.get("color"), "id": state.get("id")},
+                    "state": {
+                        "name": state.get("name"),
+                        "type": state.get("type"),
+                        "color": state.get("color"),
+                        "id": state.get("id"),
+                    },
                     "assignee": {
                         "id": assignee.get("id"),
                         "name": assignee.get("name"),
@@ -382,7 +494,8 @@ def new_feature(name, prefix, ticket_id=None):
                 normalized_ticket = f"{ticket_prefix}{number}"
                 parsed_branch = f"{prefix}/{normalized_ticket}{ticket_seperator}{slug}"
                 _debug(
-                    f"Detected ticket in input. normalized_ticket={normalized_ticket}, slug={slug}, branch={parsed_branch}"
+                    f"Detected ticket in input. normalized_ticket={normalized_ticket}, "
+                    f"slug={slug}, branch={parsed_branch}"
                 )
                 detected_ticket_identifier = normalized_ticket
         new_branch = parsed_branch if parsed_branch else name
@@ -465,6 +578,7 @@ def finish_feature(name, prefix):
 
 
 def _branch_func(branch_type, args):
+    load_repo_settings()
     if len(args) > 0 and args[0] == "new":
         prefix = ""
         now = datetime.datetime.now()
@@ -516,6 +630,7 @@ def release(args):
 
 
 def pullrequest(args):
+    load_repo_settings()
     branch = _current_branch()
     if branch == master_branch:
         sys.exit(__name__ + ": can't issue pull requests on {}".format(master_branch))
@@ -667,6 +782,7 @@ def _name_has_embedded_ticket(candidate_name, prefix):
 
 
 def run(prefix, args):
+    load_repo_settings()
     if len(args) and args[0].lower() == "new":
         allowed_branch_types = ["releasecandidate", "stable", "release", "hotfix"]
         if prefix in allowed_branch_types:
@@ -681,7 +797,7 @@ def run(prefix, args):
             else:
                 ticket_id = None
 
-            if require_ticket_id == "true":
+            if require_ticket_id:
                 if len(args) < 3 and not _name_has_embedded_ticket(args[1], prefix):
                     sys.exit("Usage: git %s new <%s_name> <ticket_id>" % (prefix, prefix))
 
@@ -759,6 +875,7 @@ def preview_changelog(args):
     """
     Render the changelog template using current context without creating a feature.
     """
+    load_repo_settings()
     opts = _parse_args(args)
     branch = opts["branch"] or _current_branch()
     ticket_identifier = opts["ticket"]
