@@ -179,6 +179,7 @@ The environment variable wins.
 - ``gitfeatures.requireTicketId`` / ``GITFEATURES_REQUIRE_TICKETID``: Set to ``true`` to require a ticket id on ``feature new``/``hotfix new``.
 - ``gitfeatures.debug`` / ``GITFEATURES_DEBUG``: Set to ``true`` to print debug output.
 - ``changelog.enabled`` / ``GITFEATURES_CHANGELOG_ENABLED``: When ``true``, enables changelog generation on ``git feature new`` and PR body population from the changelog on ``git pullrequest``. Default: ``false``.
+- ``changelog.template`` / ``GITFEATURES_CHANGELOG_TEMPLATE``: Changelog template file, absolute or relative to the repo root. See `Changelog template`_.
 
 Boolean settings accept ``true``, ``1``, ``yes`` or ``on``.
 
@@ -242,19 +243,48 @@ Templating via Jinja2
 Changelog template
 ------------------
 
-- Default path: ``changelog-template.md`` in the repo root
-- If missing, falls back to a bundled default inside the ``gitfeatures`` package (``gitfeatures/templates/changelog-template.md``).
-- Override with: ``GITFEATURES_CHANGELOG_TEMPLATE`` (absolute or repo-root-relative)
-- Variables available to the template:
-  - ``branch``: new branch name
-  - ``ticket``: detected ticket identifier (e.g. ``ENG-123``) if available
-  - ``repo_full_name``: owner/name derived from ``origin`` url
-  - ``master_branch``: base branch (default: ``main``)
-  - ``linear``: dict with ``identifier``, ``title``, ``description``, ``url`` (if available)
-  - ``issue``: generic issue dict for providers (``provider``, ``id``, ``key``, ``title``, ``description``, ``url``)
-  - ``title``, ``background``, ``changes``, ``testing``: prefilled suggestions (title/background come from Linear if available)
-  - ``now``: current UTC timestamp in ISO format
-- If the template is missing, the tool falls back to a bundled default inside the package. If rendering fails, the changelog is created empty.
+gitfeatures ships a default changelog template
+(`gitfeatures/templates/changelog-template.md <gitfeatures/templates/changelog-template.md>`_).
+To use your own, copy the default into your repository and edit it:
+
+::
+
+    $ git changelog --init-template
+    Wrote /path/to/repo/changelog-template.md
+    Set changelog.template = changelog-template.md in /path/to/repo/.gitfeatures
+    Set changelog.enabled = true in /path/to/repo/.gitfeatures
+
+This writes the default template to ``changelog-template.md`` in the repo root (or to ``--out <path>``,
+relative to the repo root), and records it in ``.gitfeatures``. It also turns changelogs on if
+``.gitfeatures`` does not already say whether they are on. It will not overwrite an existing file
+unless you pass ``--force``. Commit the template and ``.gitfeatures`` so everyone on the repo uses them:
+
+::
+
+    [changelog]
+        enabled = true
+        template = .github/changelog-template.md
+
+The template is chosen in this order:
+
+1. ``changelog.template`` in ``.gitfeatures``, or ``GITFEATURES_CHANGELOG_TEMPLATE``: absolute, or relative
+   to the repo root. If the file does not exist, gitfeatures says so and uses the bundled default.
+2. ``changelog-template.md`` in the repo root, for repos that relied on it before ``changelog.template``
+   existed.
+3. The bundled default.
+
+Variables available to the template:
+
+- ``branch``: new branch name
+- ``ticket``: detected ticket identifier (e.g. ``ENG-123``) if available
+- ``repo_full_name``: owner/name derived from ``origin`` url
+- ``master_branch``: base branch (default: ``main``)
+- ``linear``: dict with ``identifier``, ``title``, ``description``, ``url`` (if available)
+- ``issue``: generic issue dict for providers (``provider``, ``id``, ``key``, ``title``, ``description``, ``url``)
+- ``title``, ``background``, ``changes``, ``testing``: prefilled suggestions (title/background come from Linear if available)
+- ``now``: current UTC timestamp in ISO format
+
+If rendering fails, the changelog is created empty.
 
 Preview without creating a feature
 ----------------------------------

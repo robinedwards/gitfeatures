@@ -12,6 +12,7 @@ The format is based on Keep a Changelog, and this project adheres loosely to Sem
 
 ### Added
 - Per-repository settings in a committed `.gitfeatures` file (git config format). Every `GITFEATURES_*` environment variable has a matching key; environment variables still work and take precedence, with a notice when they override a value from the file.
+- `changelog.template` setting for the changelog template, and `git changelog --init-template [--out <path>] [--force]` to copy the bundled default into a repo for editing and record it in `.gitfeatures`.
 - Console entry points for all commands via `console_scripts` so `git feature`, `git hotfix`, etc. work when installed.
 - `pyproject.toml` with modern build system metadata.
 - Comprehensive README with full command and environment variable documentation.
@@ -23,6 +24,8 @@ The format is based on Keep a Changelog, and this project adheres loosely to Sem
 - Updated script shebangs to `python3` for local direct invocation.
 
 ### Fixed
+- A changelog template path that is set but missing is now reported instead of silently falling back to the bundled default.
+- Rendering a changelog no longer exits in a repo without an `origin` remote.
 - Corrected a runtime error in pull request flow (replaced `raise ()` with a proper re-raise).
 
 ### Removed

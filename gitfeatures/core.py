@@ -29,6 +29,8 @@ SETTINGS = (
     ("require_ticket_id", "GITFEATURES_REQUIRE_TICKETID", "gitfeatures.requireTicketId", "false"),
     ("debug_enabled", "GITFEATURES_DEBUG", "gitfeatures.debug", "false"),
     ("changelog_enabled", "GITFEATURES_CHANGELOG_ENABLED", "changelog.enabled", "false"),
+    # Path of the changelog template, absolute or relative to the repo root. Empty means "not configured".
+    ("changelog_template_path", "GITFEATURES_CHANGELOG_TEMPLATE", "changelog.template", ""),
 )
 BOOLEAN_SETTINGS = ("require_ticket_id", "debug_enabled", "changelog_enabled")
 _TRUTHY = ("1", "true", "yes", "on")
@@ -37,6 +39,10 @@ _TRUTHY = ("1", "true", "yes", "on")
 repo = master_branch = merge_strategy = fork_pr_strategy = ""
 branch_seperator = ticket_seperator = ticket_prefix = ""
 require_ticket_id = debug_enabled = changelog_enabled = False
+changelog_template_path = ""
+config_path_loaded: Optional[str] = None
+# For each setting, where its value came from: the environment variable, the .gitfeatures key, or "default".
+setting_sources: Dict[str, str] = {}
 
 
 def _is_truthy(value) -> bool:
@@ -85,10 +91,12 @@ def load_settings(config_path: Optional[str] = None, environ=None) -> Dict[str, 
     environ = os.environ if environ is None else environ
     config = _read_config_file(config_path)
     resolved: Dict[str, Any] = {}
+    sources: Dict[str, str] = {}
     for attr, env_var, key, default in SETTINGS:
         file_value = config.get(key.lower())
         if env_var in environ:
             value = environ[env_var]
+            sources[attr] = env_var
             if file_value is not None and not _same_setting_value(attr, value, file_value):
                 print(
                     f"gitfeatures: {env_var}={value!r} overrides {key} = {file_value!r} from {config_path}",
@@ -96,14 +104,18 @@ def load_settings(config_path: Optional[str] = None, environ=None) -> Dict[str, 
                 )
         elif file_value is not None:
             value = file_value
+            sources[attr] = f"{key} in {config_path}"
         else:
             value = default
+            sources[attr] = "default"
         resolved[attr] = value
     if resolved["ticket_seperator"] is None:
         resolved["ticket_seperator"] = resolved["branch_seperator"]
     for attr in BOOLEAN_SETTINGS:
         resolved[attr] = _is_truthy(resolved[attr])
     globals().update(resolved)
+    globals()["setting_sources"] = sources
+    globals()["config_path_loaded"] = config_path
     return resolved
 
 
@@ -203,39 +215,85 @@ def _get_repo_root() -> str:
 ""  # Story template removed; only changelog template is supported
 
 
-def _read_changelog_template() -> Optional[str]:
+DEFAULT_CHANGELOG_TEMPLATE = os.path.join(os.path.dirname(__file__), "templates", "changelog-template.md")
+# Picked up from the repo root when changelog.template is not set, for repos that relied on it before
+# the setting existed.
+LEGACY_CHANGELOG_TEMPLATE = "changelog-template.md"
+
+
+def _resolve_repo_path(path: str) -> str:
+    return path if os.path.isabs(path) else os.path.join(_get_repo_root(), path)
+
+
+def _changelog_template_file() -> str:
     """
-    Read changelog-template.md (or path from GITFEATURES_CHANGELOG_TEMPLATE) from the repo.
+    Return the changelog template to use, in order:
+    1. changelog.template (or GITFEATURES_CHANGELOG_TEMPLATE), absolute or relative to the repo root;
+    2. changelog-template.md in the repo root;
+    3. the default template bundled with gitfeatures.
+    A configured template that does not exist is reported on stderr and the bundled default is used.
+    """
+    if changelog_template_path:
+        path = _resolve_repo_path(changelog_template_path)
+        if os.path.isfile(path):
+            return path
+        source = setting_sources.get("changelog_template_path", "configuration")
+        print(
+            f"gitfeatures: changelog template {path} (set by {source}) does not exist, so the bundled default is used",
+            file=sys.stderr,
+        )
+        return DEFAULT_CHANGELOG_TEMPLATE
+    legacy = _resolve_repo_path(LEGACY_CHANGELOG_TEMPLATE)
+    if os.path.isfile(legacy):
+        return legacy
+    return DEFAULT_CHANGELOG_TEMPLATE
+
+
+def _read_changelog_template() -> Optional[str]:
+    path = _changelog_template_file()
+    _debug(f"Using changelog template {path}")
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            return fh.read()
+    except Exception as e:
+        _debug(f"Failed to read changelog template {path}: {e}")
+        return None
+
+
+def init_changelog_template(out: Optional[str] = None, force: bool = False) -> str:
+    """
+    Copy the bundled default changelog template into the repo so it can be edited, and record it as
+    changelog.template in the repo's .gitfeatures file. Returns the path written.
     """
     repo_root = _get_repo_root()
-    override = os.environ.get("GITFEATURES_CHANGELOG_TEMPLATE", "").strip()
-    if override:
-        path = override if os.path.isabs(override) else os.path.join(repo_root, override)
-    else:
-        path = os.path.join(repo_root, "changelog-template.md")
-    if os.path.exists(path) and os.path.isfile(path):
-        try:
-            with open(path, "r", encoding="utf-8") as fh:
-                return fh.read()
-        except Exception as e:
-            _debug(f"Failed to read changelog-template.md: {e}")
-    # Fallback to bundled default template inside the package
-    try:
-        pkg_dir = os.path.dirname(__file__)
-        bundled = os.path.join(pkg_dir, "templates", "changelog-template.md")
-        if os.path.exists(bundled) and os.path.isfile(bundled):
-            with open(bundled, "r", encoding="utf-8") as fh:
-                return fh.read()
-    except Exception as e:
-        _debug(f"Failed to read bundled changelog template: {e}")
-    return None
+    target_setting = out or changelog_template_path or LEGACY_CHANGELOG_TEMPLATE
+    target = _resolve_repo_path(target_setting)
+    if os.path.exists(target) and not force:
+        sys.exit(f"{target} already exists. Use --force to overwrite it with the default template.")
+    parent = os.path.dirname(target)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    with open(DEFAULT_CHANGELOG_TEMPLATE, "r", encoding="utf-8") as src, open(target, "w", encoding="utf-8") as dst:
+        dst.write(src.read())
+
+    config_file = os.path.join(repo_root, CONFIG_FILENAME)
+    relative = os.path.relpath(target, repo_root)
+    stored = target if relative.startswith(os.pardir) else relative
+    _call(["git", "config", "--file", config_file, "changelog.template", stored])
+    print(f"Wrote {target}")
+    print(f"Set changelog.template = {stored} in {config_file}")
+    if "changelog.enabled" not in _read_config_file(config_file):
+        _call(["git", "config", "--file", config_file, "changelog.enabled", "true"])
+        print(f"Set changelog.enabled = true in {config_file}")
+    print(f"Edit the template, then commit it and {CONFIG_FILENAME}.")
+    return target
 
 
 def _build_changelog_context(
     branch: str, ticket_identifier: Optional[str], linear_issue: Optional[Dict[str, Any]]
 ) -> Dict[str, Any]:
     """
-    Build a Jinja2 context for rendering user-story-template.md.
+    Build the Jinja2 context for rendering the changelog template.
     """
     # Suggested fields
     title = (linear_issue.get("title") if linear_issue else "") or branch
@@ -243,9 +301,10 @@ def _build_changelog_context(
     repo_origin = ""
     repo_full_name = ""
     try:
-        repo_origin = _call(["git", "config", "--get", "remote.origin.url"])
+        # Not _call(): it exits when the repo has no origin remote, and the changelog does not need one.
+        repo_origin = check_output(["git", "config", "--get", "remote.origin.url"], stderr=DEVNULL).decode("utf-8")
         repo_full_name = _get_repo_full_name_from_origin_url(repo_origin)
-    except Exception:
+    except (CalledProcessError, OSError):
         pass
     # Generic issue payload for potential multiple providers
     issue: Dict[str, Any] = {}
@@ -840,6 +899,12 @@ def cli_releasecandidate():
     return run("releasecandidate", sys.argv[1:])
 
 
+CHANGELOG_USAGE = (
+    "Usage: git-changelog [--branch <name>] [--ticket <id>] [--write] [--out <path>]\n"
+    "       git-changelog --init-template [--out <path>] [--force]"
+)
+
+
 def _parse_args(args):
     """
     Minimal flag parser for preview commands.
@@ -848,8 +913,10 @@ def _parse_args(args):
       --ticket <identifier>
       --write
       --out <path>
+      --init-template
+      --force
     """
-    opts = {"branch": None, "ticket": None, "write": False, "out": None}
+    opts = {"branch": None, "ticket": None, "write": False, "out": None, "init_template": False, "force": False}
     i = 0
     while i < len(args):
         a = args[i]
@@ -865,9 +932,15 @@ def _parse_args(args):
         elif a == "--out" and i + 1 < len(args):
             opts["out"] = args[i + 1]
             i += 2
+        elif a == "--init-template":
+            opts["init_template"] = True
+            i += 1
+        elif a == "--force":
+            opts["force"] = True
+            i += 1
         else:
             print(f"Unrecognized or incomplete option: {a}")
-            sys.exit("Usage: git-changelog [--branch <name>] [--ticket <id>] [--write] [--out <path>]")
+            sys.exit(CHANGELOG_USAGE)
     return opts
 
 
@@ -877,6 +950,11 @@ def preview_changelog(args):
     """
     load_repo_settings()
     opts = _parse_args(args)
+    if opts["init_template"]:
+        if opts["branch"] or opts["ticket"] or opts["write"]:
+            sys.exit(CHANGELOG_USAGE)
+        init_changelog_template(opts["out"], opts["force"])
+        return
     branch = opts["branch"] or _current_branch()
     ticket_identifier = opts["ticket"]
 
@@ -911,7 +989,7 @@ def preview_changelog(args):
     # Render from changelog template
     changelog_template = _read_changelog_template()
     if not changelog_template:
-        sys.exit("No changelog template found. Provide GITFEATURES_CHANGELOG_TEMPLATE or add changelog-template.md.")
+        sys.exit("Unable to read the changelog template. Run with GITFEATURES_DEBUG=1 for details.")
     context = _build_changelog_context(branch, detected_ticket_identifier, linear_issue)
     rendered = _render_changelog_template(changelog_template, context)
     if rendered is None:
