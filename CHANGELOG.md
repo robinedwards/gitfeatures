@@ -8,6 +8,7 @@ The format is based on Keep a Changelog, and this project adheres loosely to Sem
 
 ### Added
 - CI now also runs pre-commit on every file, runs the tests on macOS (Python 3.10 and 3.14), and builds the package and runs the commands from the installed wheel. The workflow token is read-only, and Dependabot keeps the actions up to date.
+- CodeQL analysis of the Python code and the workflows, with the `security-and-quality` queries, on pull requests, pushes to `master` and weekly.
 
 ### Breaking
 - Default base branch changed from `master` to `main`. You can override via `GITFEATURES_MASTER_BRANCH`.
