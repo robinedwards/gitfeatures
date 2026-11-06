@@ -1,4 +1,4 @@
 black==26.10.1
 flake8==3.9.2
 isort==5.8.0
-pytest==8.3.5
+pytest==9.0.3
