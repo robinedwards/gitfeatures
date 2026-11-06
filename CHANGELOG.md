@@ -13,6 +13,7 @@ The format is based on Keep a Changelog, and this project adheres loosely to Sem
 ### Added
 - Per-repository settings in a committed `.gitfeatures` file (git config format). Every `GITFEATURES_*` environment variable has a matching key; environment variables still work and take precedence, with a notice when they override a value from the file.
 - `changelog.template` setting for the changelog template, and `git changelog --init-template [--out <path>] [--force]` to copy the bundled default into a repo for editing and record it in `.gitfeatures`.
+- A pytest suite (`tests/`) covering settings, the changelog template, `--init-template`, `git feature new` and `git pullrequest --dry-run`, run by GitHub Actions on Python 3.9 to 3.13.
 - Console entry points for all commands via `console_scripts` so `git feature`, `git hotfix`, etc. work when installed.
 - `pyproject.toml` with modern build system metadata.
 - Comprehensive README with full command and environment variable documentation.

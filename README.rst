@@ -322,6 +322,15 @@ Development
     $ pip install -r requirements-dev.txt
     $ pip install -e .
 
+Run the tests with:
+
+::
+
+    $ pytest
+
+The tests create throwaway git repos (with a local bare repo as ``origin``) in a temp directory and
+ignore your own git config and ``GITFEATURES_*`` environment variables.
+
 ********
 License
 ********
