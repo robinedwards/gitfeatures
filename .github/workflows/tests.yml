@@ -5,14 +5,42 @@ name: tests
   push:
     branches: [master]
   pull_request:
+  workflow_dispatch:
+
+# Pull requests from forks run with a read-only token.
+permissions:
+  contents: read
+
+# A new push to a pull request cancels its earlier run. Runs on master always finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  pytest:
+  lint:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - run: pip install pre-commit
+      - run: pre-commit run --all-files --show-diff-on-failure
+
+  pytest:
+    name: pytest (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        include:
+          # Most people run gitfeatures on a Mac, so check the oldest and newest Python there too.
+          - os: macos-latest
+            python-version: "3.10"
+          - os: macos-latest
+            python-version: "3.14"
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -20,3 +48,31 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e . pytest
       - run: pytest -q
+
+  package:
+    # Builds the sdist and wheel and runs the commands from an installed wheel, which catches files
+    # missing from the package (such as the bundled changelog template) that an editable install hides.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - run: pip install build
+      - run: python -m build
+      - name: Run the commands from the installed wheel
+        run: |
+          python -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install dist/*.whl
+          export PATH="$RUNNER_TEMP/venv/bin:$PATH"
+          cd "$(mktemp -d)"
+          git init -q -b main
+          git -c user.name=ci -c user.email=ci@example.com commit -q --allow-empty -m init
+          git changelog --branch feature/smoke | grep -qx "## Purpose"
+          git changelog --init-template
+          test -s changelog-template.md
+          git config --file .gitfeatures changelog.template
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/

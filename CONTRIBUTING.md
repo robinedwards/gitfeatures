@@ -28,13 +28,27 @@ in for `origin`, so they need no network access and never touch your repos. A fi
 `tests/conftest.py` clears `GITFEATURES_*` and the other gitfeatures environment variables and points
 git at an empty global config, so your own setup cannot change the results.
 
-GitHub Actions runs the tests on every pull request on Python 3.10 to 3.14
-(`.github/workflows/tests.yml`).
+## Continuous integration
+
+GitHub Actions (`.github/workflows/tests.yml`) runs on every pull request, including those from forks,
+and on every push to `master`. It has three jobs:
+
+- **lint**: `pre-commit run --all-files`, the same hooks as your local pre-commit.
+- **pytest**: the tests on Ubuntu with Python 3.10 to 3.14, and on macOS with Python 3.10 and 3.14.
+- **package**: builds the sdist and wheel, installs the wheel into a clean virtualenv, and runs
+  `git changelog` and `git changelog --init-template` from it. This catches files missing from the
+  package, such as the bundled changelog template, which an editable install would hide. The built
+  `dist/` is kept as a workflow artifact.
+
+The workflow's token is read-only. A new push to a pull request cancels the pull request's earlier run.
+Dependabot (`.github/dependabot.yml`) opens a monthly pull request to update the actions it uses.
+
+You can also run the workflow by hand from the Actions tab ("Run workflow").
 
 ## Code style
 
 pre-commit runs black (line length 119), isort, flake8, yamllint and an RST linter for `README.rst`.
-Run them on your changes before pushing:
+CI runs them on every file. Run them on your changes before pushing:
 
 ```bash
 pre-commit run --files <changed files>
