@@ -2,6 +2,10 @@
 git features
 ============
 
+.. image:: https://github.com/robinedwards/gitfeatures/actions/workflows/tests.yml/badge.svg?branch=master
+   :target: https://github.com/robinedwards/gitfeatures/actions/workflows/tests.yml
+   :alt: tests
+
 git helper scripts for managing feature branches and issuing pull requests. gitfeatures creates and
 pushes consistently named branches, opens pull requests against the right base branch, cleans up
 merged branches, and can write a changelog for each branch from a template you control.

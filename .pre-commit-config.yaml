@@ -15,6 +15,9 @@ repos:
       # - id: detect-private-key
       - id: trailing-whitespace
       - id: end-of-file-fixer
+        # Jinja drops one trailing newline when rendering, so the template needs a blank last line
+        # for rendered changelogs to end with a newline.
+        exclude: ^gitfeatures/templates/
       - id: fix-byte-order-marker
       - id: mixed-line-ending  # force UNIX file endings for consistency
         args: [--fix=lf]
