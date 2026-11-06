@@ -1,0 +1,45 @@
+---
+# CodeQL static analysis of the Python code and the GitHub Actions workflows. Results appear under
+# Security > Code scanning, and new findings are reported on the pull request that introduces them.
+name: CodeQL
+
+"on":
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  schedule:
+    # Weekly, so newly published queries are run against unchanged code too.
+    - cron: "25 19 * * 4"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write  # to upload the results
+    strategy:
+      fail-fast: false
+      matrix:
+        # Neither language needs building, so CodeQL reads the source directly.
+        language: [actions, python]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          # The default security queries plus code-quality checks (unused code, likely bugs and so on).
+          queries: security-and-quality
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}

@@ -40,10 +40,16 @@ and on every push to `master`. It has three jobs:
   package, such as the bundled changelog template, which an editable install would hide. The built
   `dist/` is kept as a workflow artifact.
 
-The workflow's token is read-only. A new push to a pull request cancels the pull request's earlier run.
-Dependabot (`.github/dependabot.yml`) opens a monthly pull request to update the actions it uses.
+CodeQL (`.github/workflows/codeql.yml`) also runs on every pull request to `master`, every push to
+`master` and weekly. It analyses the Python code and the workflows with the `security-and-quality`
+queries, and reports new findings on the pull request that introduces them. All findings are under
+Security > Code scanning.
 
-You can also run the workflow by hand from the Actions tab ("Run workflow").
+The workflows' tokens are read-only, except that CodeQL may upload its results. A new push to a pull
+request cancels its earlier runs. Dependabot (`.github/dependabot.yml`) opens a monthly pull request to
+update the actions the workflows use.
+
+You can also run either workflow by hand from the Actions tab ("Run workflow").
 
 ## Code style
 
