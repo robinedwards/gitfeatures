@@ -170,11 +170,13 @@ def test_pullrequest_refuses_on_base_branch_from_file(repo_with_origin):
     assert "can't issue pull requests on trunk" in str(excinfo.value)
 
 
-def test_pullrequest_dry_run_compares_against_base_branch_from_file(repo_with_origin, capsys):
+def test_pullrequest_dry_run_compares_against_base_branch_from_file(repo_with_origin, capsys, monkeypatch):
     git("push", "-q", "origin", "main:trunk", cwd=repo_with_origin)
     git("switch", "-q", "-c", "feature_x", cwd=repo_with_origin)
     git("push", "-q", "-u", "origin", "feature_x", cwd=repo_with_origin)
     write_config(repo_with_origin, "[gitfeatures]\n\tmasterBranch = trunk\n\tforkPrStrategy = private\n")
+    # git only recorded "Created from HEAD", so gitfeatures asks whether the base is trunk
+    monkeypatch.setattr("builtins.input", lambda: "y")
 
     core.pullrequest(["--dry-run"])
 

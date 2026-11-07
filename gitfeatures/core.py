@@ -149,6 +149,81 @@ def _call(args):
         sys.exit(__name__ + ": none zero exit status executing: " + " ".join(args))  # noqa
 
 
+def _git_output(args) -> Optional[str]:
+    """Run git quietly and return its stripped output, or None if it fails."""
+    try:
+        return check_output(["git", *args], stderr=DEVNULL).decode("utf-8").strip()
+    except (CalledProcessError, OSError):
+        return None
+
+
+def _ref_exists(ref) -> bool:
+    return _git_output(["rev-parse", "--verify", "--quiet", ref]) is not None
+
+
+# Each branch's base (the branch it was created from, and the one its pull request goes into) is kept in
+# the repo's git config as branch.<name>.gitfeaturesBase. Git renames and deletes it with the branch.
+BASE_CONFIG_KEY = "gitfeaturesBase"
+_CREATED_FROM = re.compile(r"^branch: Created from (.+)$")
+
+
+def _record_base_branch(branch, base):
+    _call(["git", "config", f"branch.{branch}.{BASE_CONFIG_KEY}", base])
+
+
+def _record_base_if_branch(branch, start):
+    """Record start as branch's base when start is a local branch, not a detached HEAD."""
+    if _ref_exists(f"refs/heads/{start}"):
+        _record_base_branch(branch, start)
+        _debug(f"Recorded {start} as the base branch of {branch}")
+
+
+def _base_branch_from_reflog(branch) -> Optional[str]:
+    """
+    The branch git's reflog says branch was created from, such as release_x for "Created from origin/release_x".
+    None when git recorded only HEAD or a commit, the reflog has expired, or that branch is not on origin.
+    """
+    entries = _git_output(["reflog", "show", "--format=%gs", f"refs/heads/{branch}", "--"])
+    match = _CREATED_FROM.match(entries.splitlines()[-1]) if entries else None
+    if not match:
+        return None
+    start = re.sub(r"^(refs/heads/|refs/remotes/origin/|remotes/origin/|origin/)", "", match.group(1).strip())
+    if start in ("HEAD", branch) or not _ref_exists(f"refs/remotes/origin/{start}"):
+        return None
+    return start
+
+
+def _resolve_base_branch(branch, requested=None) -> str:
+    """
+    Return the branch that branch is brought up to date with and has its pull request opened against:
+    1. requested (git pullrequest --base <branch>);
+    2. branch.<branch>.gitfeaturesBase, recorded when gitfeatures created the branch or by an earlier run;
+    3. the branch git's reflog says it was created from;
+    4. the configured base branch, only once you confirm it.
+    The answer is recorded in branch.<branch>.gitfeaturesBase so later runs use it.
+    """
+    recorded = _git_output(["config", "--get", f"branch.{branch}.{BASE_CONFIG_KEY}"])
+    if requested:
+        base, source = requested, "from --base"
+    elif recorded:
+        base, source = recorded, f"recorded in branch.{branch}.{BASE_CONFIG_KEY}"
+    else:
+        base, source = _base_branch_from_reflog(branch), "the branch it was created from"
+        if not base:
+            print(f"gitfeatures doesn't know which branch {branch} was created from. Was it {master_branch}? [y/n]")
+            if input().lower() != "y":
+                sys.exit(f"Run git pullrequest --base <branch>, naming the branch {branch} was created from.")
+            base, source = master_branch, "confirmed"
+    if base == branch:
+        sys.exit(f"{__name__}: {branch} can't be its own base branch. Pass --base <branch>.")
+    if not _ref_exists(f"refs/remotes/origin/{base}"):
+        sys.exit(f"{__name__}: the base branch {base} ({source}) is not on origin. Push it, or pass --base <branch>.")
+    if base != recorded:
+        _record_base_branch(branch, base)
+    print(f"Base branch: {base} ({source})")
+    return base
+
+
 def _get_repo_full_name_from_origin_url(origin_url):
     """
     Extract the 'owner/repo' full name from a git remote URL (ssh or https).
@@ -573,6 +648,7 @@ def new_feature(name, prefix, ticket_id=None):
         sys.exit(__name__ + ": local or remote branch already exists: " + new_branch)  # noqa
 
     _call(["git", "checkout", "-b", new_branch])
+    _record_base_if_branch(new_branch, original_branch)
     _call(["git", "push", "-u", "origin", new_branch + ":" + new_branch])
     # Create changelog file for this branch if feature is enabled and file not present
     if changelog_enabled:
@@ -606,34 +682,66 @@ def new_feature(name, prefix, ticket_id=None):
             _debug(f"Unable to create changelog file: {e}")
 
 
-def finish_feature(name, prefix):
+def _worktree_with_branch(branch) -> Optional[str]:
+    """The path of the worktree that has branch checked out, or None."""
+    path = None
+    for line in (_git_output(["worktree", "list", "--porcelain"]) or "").splitlines():
+        if line.startswith("worktree "):
+            path = line.removeprefix("worktree ")
+        elif line == f"branch refs/heads/{branch}":
+            return path
+    return None
+
+
+def _leave_current_branch(base_branch):
+    """
+    Move off the current branch so it can be deleted: onto the base branch when no worktree has it checked
+    out, otherwise onto a detached HEAD at origin/<base>, so another worktree's checkout is never needed.
+    """
+    if _ref_exists(f"refs/heads/{base_branch}") and not _worktree_with_branch(base_branch):
+        _call(["git", "checkout", base_branch])
+    else:
+        _call(["git", "checkout", "--detach", f"origin/{base_branch}"])
+        print(f"{base_branch} is checked out in another worktree, so HEAD is now detached at origin/{base_branch}.")
+
+
+def finish_feature(name, prefix, requested_base=None):
     cur_branch = _current_branch()
 
     if name:
         branch = _get_branch_name(prefix, name)
-        if branch == cur_branch:
-            _call(["git", "checkout", master_branch])
     elif cur_branch != master_branch:
         branch = cur_branch
-        _call(["git", "checkout", master_branch])
     else:
         sys.exit(__name__ + ": please provide a branch name if on {}".format(master_branch))
+    if branch != cur_branch:
+        other_worktree = _worktree_with_branch(branch)
+        if other_worktree:
+            sys.exit(f"{__name__}: {branch} is checked out in {other_worktree}. Run this there instead.")
 
     _call(["git", "remote", "update", "origin"])
+    base_branch = _resolve_base_branch(branch, requested_base)
 
-    commits = _call(["git", "log", "--oneline", branch, "^origin/{}".format(master_branch)])
+    commits = _call(["git", "log", "--oneline", branch, "^origin/{}".format(base_branch)])
     if commits:
         sys.exit(
             __name__
             + ": "
             + branch
-            + " contains commits that are not in {}:\n".format(master_branch)
+            + " contains commits that are not in {}:\n".format(base_branch)
             + commits
             + "\nraise a pull request and get them merged in."
         )
-    else:
+    if branch == cur_branch:
+        _leave_current_branch(base_branch)
+    if _git_output(["ls-remote", "--exit-code", "--heads", "origin", f"refs/heads/{branch}"]) is not None:
         _call(["git", "push", "origin", ":" + branch])
-        _call(["git", "branch", "-D", branch])
+    else:
+        # Already deleted on origin, e.g. by GitHub after the merge. Drop the stale origin/<branch> too.
+        print(f"{branch} has already been deleted on origin.")
+        if _ref_exists(f"refs/remotes/origin/{branch}"):
+            _call(["git", "branch", "--delete", "--remotes", f"origin/{branch}"])
+    _call(["git", "branch", "-D", branch])
 
 
 def _branch_func(branch_type, args):
@@ -654,7 +762,9 @@ def _branch_func(branch_type, args):
         name = "{}_{}".format(date_string, prefix)
         new_branch = _get_branch_name(branch_type, name)
 
+        start = _current_branch()
         _call(["git", "checkout", "-b", new_branch])
+        _record_base_if_branch(new_branch, start)
         _call(["git", "push", "-u", "origin", new_branch + ":" + new_branch])
 
         branches = _get_branches(branch_type)
@@ -688,43 +798,44 @@ def release(args):
     return _branch_func("release", args)
 
 
+PULLREQUEST_USAGE = "Usage: git pullrequest [--base <branch>] [--dry-run]"
+
+
+def _pop_base_option(args, usage):
+    """Split `--base <branch>` out of args, returning (branch or None, the other args)."""
+    if "--base" not in args:
+        return None, list(args)
+    index = args.index("--base")
+    if index + 1 >= len(args) or args[index + 1].startswith("-"):
+        sys.exit(usage)
+    return args[index + 1], [arg for i, arg in enumerate(args) if i not in (index, index + 1)]
+
+
 def pullrequest(args):
     load_repo_settings()
+    requested_base, args = _pop_base_option(args, PULLREQUEST_USAGE)
+    dry_run = "--dry-run" in args
+
     branch = _current_branch()
     if branch == master_branch:
         sys.exit(__name__ + ": can't issue pull requests on {}".format(master_branch))
 
-    # check its up to date with remote master if not pull
     _call(["git", "remote", "update", "origin"])
-    commits = _call(["git", "log", "--oneline", "^" + branch, "origin/{}".format(master_branch)])
+    base_branch = _resolve_base_branch(branch, requested_base)
+
+    # check it is up to date with the base branch on origin, and offer to update it if not
+    base = f"origin/{base_branch}"
+    commits = _call(["git", "log", "--oneline", "^" + branch, base])
     if commits:
-        print(
-            "Your branch is behind origin/{} so cannot be automatically {}d.".format(master_branch, merge_strategy)
-        )  # noqa
+        print(f"Your branch is behind {base} so cannot be automatically {merge_strategy}d.")
         print(commits)
         print(
-            "Do you wish to update and {} {} (If conflicts occur, you will be able to fix them)? [y/n]".format(
-                merge_strategy, master_branch
-            )
-        )  # noqa
+            f"Do you wish to fetch {base} and {merge_strategy} {branch} with it "
+            "(If conflicts occur, you will be able to fix them)? [y/n]"
+        )
         if input().lower() == "y":
-            _call(["git", "checkout", master_branch])
-            _call(["git", "pull"])
-            _call(["git", "checkout", branch])
-            try:
-                print("git {} {}".format(merge_strategy, master_branch))
-                output = check_output(["git", merge_strategy, master_branch]).decode("utf-8")
-                print(output)
-                print("Congratulations, successfully {}d {}".format(merge_strategy, master_branch))
-            except CalledProcessError as e:
-                if b"CONFLICT" in e.output:
-                    err = (
-                        e.output.decode()
-                        + " \n\nUnlucky! You have work to do. Fix the above conflicts and run git pullrequest again"
-                    )  # noqa
-                    sys.exit(err)
-                else:
-                    raise
+            _call(["git", "fetch", "origin", base_branch])
+            _update_branch_from(base)
 
     # check if there are any unpushed commits
     commits = _call(["git", "log", "--oneline", branch, "^origin/" + branch])
@@ -740,15 +851,15 @@ def pullrequest(args):
     name = _get_repo_full_name_from_origin_url(origin)
     print("name", name)
     print("branch", branch)
-    url = _get_pullrequest_url(name, branch)
-    if (len(args) > 0 and args[0] == "--dry-run") or os.environ.get("CONSOLEONLY", False):  # noqa
+    url = _get_pullrequest_url(name, branch, base_branch)
+    if dry_run or os.environ.get("CONSOLEONLY", False):
         print(url)
     else:
         # If a GitHub token is present, attempt to create the PR via API
         token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
         if repo == "github" and token:
             body = _read_changelog_body(branch) if changelog_enabled else None
-            ok, resp = _create_github_pr_with_token(name, branch, master_branch, body, token)
+            ok, resp = _create_github_pr_with_token(name, branch, base_branch, body, token)
             if ok:
                 pr_url = resp.get("html_url") or url
                 print(f"Created PR: {pr_url}")
@@ -765,15 +876,41 @@ def pullrequest(args):
         webbrowser.open_new_tab(url)
 
 
-def _get_pullrequest_url(name, branch):
-    print("pullrequest", name, branch, fork_pr_strategy)
+def _update_branch_from(base):
+    """
+    Merge base (e.g. origin/main) into the current branch, or rebase the current branch onto it when the
+    strategy is rebase. The base branch itself is never checked out, so this works in a git worktree while
+    the base branch is checked out in another worktree.
+    """
+    command = ["git", merge_strategy, base]
+    print(" ".join(command))
+    try:
+        output = check_output(command, stderr=STDOUT).decode("utf-8")
+    except CalledProcessError as e:
+        output = e.output.decode("utf-8")
+        if "CONFLICT" in output:
+            finish = "run `git rebase --continue`" if merge_strategy == "rebase" else "run `git commit`"
+            sys.exit(
+                f"{output}\n\nUnlucky! You have work to do. Fix the above conflicts, `git add` the fixed files, "
+                f"{finish}, then run git pullrequest again."
+            )
+        sys.exit(f"{output}\n{__name__}: `{' '.join(command)}` failed, see git's message above.")
+    print(output)
+    print(f"Congratulations, successfully {merge_strategy}d {base}")
+
+
+def _get_pullrequest_url(name, branch, base_branch):
+    print("pullrequest", name, branch, base_branch, fork_pr_strategy)
     if repo == "github":
         if fork_pr_strategy == "private":
-            url = f"https://github.com/{name}/compare/{master_branch}...{branch}"
+            url = f"https://github.com/{name}/compare/{base_branch}...{branch}"
+        elif base_branch != master_branch:
+            # pull/new/<branch> always targets the repository's default branch
+            url = f"https://github.com/{name}/compare/{base_branch}...{branch}?expand=1"
         else:
             url = "https://github.com/" + name + "/pull/new/" + branch
     elif repo == "bitbucket":
-        url = "https://bitbucket.org/" + name + "/pull-requests/new?t=1&source=" + branch  # noqa
+        url = f"https://bitbucket.org/{name}/pull-requests/new?t=1&source={branch}&dest={base_branch}"
     return url
 
 
@@ -864,12 +1001,11 @@ def run(prefix, args):
         else:
             sys.exit("Usage: git %s new <%s_name>" % (prefix, prefix))
     elif len(args) and args[0].lower() == "finish":
-        if len(args) == 1:
-            finish_feature(None, prefix)
-        elif len(args) == 2:
-            finish_feature(args[1], prefix)
-        else:
-            sys.exit("Usage: git %s finish [%s_name]" % (prefix, prefix))
+        usage = "Usage: git %s finish [%s_name] [--base <branch>]" % (prefix, prefix)
+        requested_base, rest = _pop_base_option(args[1:], usage)
+        if len(rest) > 1:
+            sys.exit(usage)
+        finish_feature(rest[0] if rest else None, prefix, requested_base)
     else:
         sys.exit("Usage: git %s <new/finish> <%s_name>" % (prefix, prefix))
 
