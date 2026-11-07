@@ -122,7 +122,7 @@ command, set the variable for that command only:
 
 ::
 
-    $ GITFEATURES_MASTER_BRANCH=release git pullrequest
+    $ GITFEATURES_STRATEGY=rebase git pullrequest
 
 Settings
 ========
@@ -130,8 +130,9 @@ Settings
 Each setting as a ``.gitfeatures`` key and as an environment variable:
 
 - ``gitfeatures.repo`` / ``GITFEATURES_REPO``: ``github`` (default) or ``bitbucket``.
-- ``gitfeatures.masterBranch`` / ``GITFEATURES_MASTER_BRANCH``: Base branch that features are created
-  from, compared against and merged into. Default: ``main``.
+- ``gitfeatures.masterBranch`` / ``GITFEATURES_MASTER_BRANCH``: The repo's main branch, which new
+  branches are normally created from. ``git pullrequest`` refuses to run on it, and offers it as the
+  base of a branch whose own base it can't work out (see `Base branches`_). Default: ``main``.
 - ``gitfeatures.strategy`` / ``GITFEATURES_STRATEGY``: How ``git pullrequest`` brings a branch up to
   date with the base branch: ``merge`` (default) or ``rebase``.
 - ``gitfeatures.forkPrStrategy`` / ``GITFEATURES_FORK_PR_STRATEGY``: If set to ``private`` on GitHub, uses
@@ -199,11 +200,12 @@ git feature
 
 - ``git feature new <name> [<ticket_id>]``: Create and push a ``feature_<name>`` branch from the current
   branch. If ``<ticket_id>`` is given, the branch is ``feature_<ticket_id>_<name>``, using the configured
-  separators and ticket prefix. You are asked to confirm if you are not on the base branch. If
+  separators and ticket prefix. You are asked to confirm if you are not on ``gitfeatures.masterBranch``.
+  The current branch is recorded as the new branch's base (see `Base branches`_). If
   ``changelog.enabled`` is on, a changelog file is written for the branch (see `Changelogs`_).
 - ``git feature finish [<name>]``: Delete the current feature branch (or the named one) locally and on
-  origin. It refuses if the branch has commits that are not in ``origin/<base branch>``, so merge the PR
-  first.
+  origin. It refuses if the branch has commits that are not in ``origin/<its base branch>``, so merge
+  the PR first.
 
 You can also pass a full branch path in the ``feature/ENG-123-description`` style that tools such as
 Linear suggest. With this in ``.gitfeatures``:
@@ -230,8 +232,8 @@ git release, git stable and git hotfix
 These create and switch between date-stamped branches:
 
 - ``git release new [<suffix>]``: Create and push ``release_YYYYMMDD_<suffix>`` from the current
-  checkout. Without a suffix, the current time (``HHMMSS``) is used. If more than three release branches
-  exist, you are asked whether to delete the oldest.
+  checkout, recording the current branch as its base. Without a suffix, the current time (``HHMMSS``) is
+  used. If more than three release branches exist, you are asked whether to delete the oldest.
 - ``git release``: Check out the latest ``release_YYYYMMDD…`` branch on origin.
 
 ``git stable`` and ``git hotfix`` work the same way with the ``stable`` and ``hotfix`` prefixes.
@@ -239,17 +241,18 @@ These create and switch between date-stamped branches:
 git pullrequest
 ===============
 
-Opens a pull request from the current branch into the base branch:
+Opens a pull request from the current branch into its base branch:
 
-1. Refuses to run on the base branch.
-2. If the branch is behind ``origin/<base branch>``, offers to update it: it fetches the base branch from
+1. Refuses to run on ``gitfeatures.masterBranch``.
+2. Works out the branch's base branch (see `Base branches`_) and prints it.
+3. If the branch is behind ``origin/<base branch>``, offers to update it: it fetches the base branch from
    origin and runs ``git merge origin/<base branch>``, or ``git rebase origin/<base branch>`` (see
    ``gitfeatures.strategy``), on the current branch. It never checks out the base branch, so it works in
    a git worktree while the base branch is checked out in another worktree. If there are conflicts it
    stops: fix them, ``git add`` the fixed files, run ``git commit`` (or ``git rebase --continue``), then
    run ``git pullrequest`` again.
-3. Offers to push unpushed commits.
-4. Creates or opens the PR:
+4. Offers to push unpushed commits.
+5. Creates or opens the PR against the base branch:
 
    - With ``GITHUB_TOKEN`` or ``GH_TOKEN`` set, on GitHub, it creates the PR through the API as a **draft**,
      titled with the branch name. If ``changelog.enabled`` is on and the branch's changelog file exists,
@@ -258,7 +261,30 @@ Opens a pull request from the current branch into the base branch:
    - Otherwise it opens the "new pull request" page for GitHub or Bitbucket in your browser.
 
 ``git pullrequest --dry-run``, or ``CONSOLEONLY=1``, prints the PR URL instead of creating or opening
-anything.
+anything. ``git pullrequest --base <branch>`` sets the branch's base branch.
+
+Base branches
+-------------
+
+Each branch has a base branch: the branch it was created from. ``git pullrequest`` brings the branch up
+to date with it and opens the pull request against it, and ``git feature finish`` checks the branch has
+been merged into it. So a branch created from ``release_20261101`` is merged with and opened against
+``release_20261101``, not ``main``.
+
+gitfeatures keeps each branch's base in the repo's git config as ``branch.<name>.gitfeaturesBase``,
+which git renames and deletes along with the branch. ``git pullrequest`` takes the base from, in order:
+
+1. ``--base <branch>``;
+2. ``branch.<name>.gitfeaturesBase``, recorded when ``git feature new`` (or ``git release new`` and the
+   like) created the branch, or by an earlier ``git pullrequest``;
+3. the branch git's reflog says the branch was created from, for branches made with git directly, such
+   as ``git worktree add -b <name> <path> origin/main`` or ``git switch -c <name> release_20261101``.
+   Git records only ``HEAD`` for ``git checkout -b <name>`` with no start point, so this can't help there;
+4. otherwise it asks whether the base is ``gitfeatures.masterBranch``. Answer ``n`` and rerun with
+   ``--base <branch>``.
+
+Whatever it uses is recorded, so later runs agree. To change a branch's base, rerun with ``--base`` or
+run ``git config branch.<name>.gitfeaturesBase <branch>``.
 
 git changelog
 =============
@@ -383,6 +409,15 @@ Troubleshooting
 ``gitfeatures: changelog template … (set by …) does not exist, so the bundled default is used``
     ``changelog.template`` or ``GITFEATURES_CHANGELOG_TEMPLATE`` points at a missing file. The message
     names the setting that pointed there. Paths are relative to the top of the working tree.
+
+``gitfeatures doesn't know which branch <branch> was created from. Was it <main branch>?``
+    Neither a recorded base nor git's reflog says where the branch came from. Answer ``y`` if it was
+    ``gitfeatures.masterBranch``; otherwise answer ``n`` and rerun with ``--base <branch>``. See
+    `Base branches`_.
+
+``the base branch <branch> (…) is not on origin``
+    The base branch is local only, or has been deleted on origin, for example after it was merged.
+    Push it, or pass ``--base`` to choose another base.
 
 ``can't issue pull requests on <branch>``
     You are on the base branch. If that is not your base branch, set ``gitfeatures.masterBranch``.
