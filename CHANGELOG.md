@@ -11,6 +11,10 @@ The format is based on Keep a Changelog, and this project adheres loosely to Sem
 - CI now also runs pre-commit on every file, runs the tests on macOS (Python 3.10 and 3.14), and builds the package and runs the commands from the installed wheel. The workflow token is read-only, and Dependabot keeps the actions up to date.
 - CodeQL analysis of the Python code and the workflows, with the `security-and-quality` queries, on pull requests, pushes to `master` and weekly.
 
+### Fixed
+- `git pullrequest` no longer gives up silently when `GITHUB_TOKEN` and `GH_TOKEN` are unset: it uses the GitHub CLI's token (`gh auth token`) if you're logged in, and otherwise says the pull request wasn't created and prints its URL as well as opening it. A GitHub API error is now printed rather than hidden behind `GITFEATURES_DEBUG`.
+- Running out of answers on stdin (e.g. `printf 'y\n' | git pullrequest` when it asks twice) now counts as "no" instead of crashing with `EOFError`.
+
 ### Breaking
 - Default base branch changed from `master` to `main`. You can override via `GITFEATURES_MASTER_BRANCH`.
 - Dropped Python 2 support and removed the `six` dependency. Python 3.10+ is now required (3.8 and 3.9 are end-of-life).

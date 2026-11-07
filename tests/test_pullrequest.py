@@ -183,3 +183,53 @@ def test_feature_finish_when_origin_already_deleted_the_branch(repo_with_origin)
 
     assert git("branch", "--show-current", cwd=repo_with_origin) == "main"
     assert "feature_d" not in git("branch", "-a", cwd=repo_with_origin)
+
+
+@pytest.fixture
+def pushed_feature(repo_with_origin, monkeypatch):
+    """feature_p, pushed and level with origin/main, with its base recorded and the browser stubbed out."""
+    git("checkout", "-q", "-b", "feature_p", cwd=repo_with_origin)
+    git("push", "-q", "-u", "origin", "feature_p", cwd=repo_with_origin)
+    git("config", "branch.feature_p.gitfeaturesBase", "main", cwd=repo_with_origin)
+    opened = []
+    monkeypatch.setattr(core.webbrowser, "open_new_tab", opened.append)
+    return opened
+
+
+def test_without_a_token_says_so_and_prints_the_url(pushed_feature, monkeypatch, capsys):
+    monkeypatch.setattr(core, "_github_token", lambda: None)
+
+    core.pullrequest([])
+
+    out = capsys.readouterr().out
+    assert "pull request was not created" in out
+    assert f"Open it in your browser: {pushed_feature[0]}" in out
+
+
+def test_api_failure_is_reported_not_hidden(pushed_feature, monkeypatch, capsys):
+    monkeypatch.setattr(core, "_github_token", lambda: "t")
+    monkeypatch.setattr(core, "_create_github_pr_with_token", lambda *a: (False, '{"message":"Validation Failed"}'))
+
+    core.pullrequest([])
+
+    out = capsys.readouterr().out
+    assert "Validation Failed" in out
+    assert "Open it in your browser:" in out
+
+
+def test_github_token_falls_back_to_the_gh_cli(monkeypatch):
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("GH_TOKEN", raising=False)
+    monkeypatch.setattr(core, "check_output", lambda args, **kw: b"gho_cli\n" if args[:2] == ["gh", "auth"] else b"")
+    assert core._github_token() == "gho_cli"
+
+    monkeypatch.setenv("GH_TOKEN", "from_env")
+    assert core._github_token() == "from_env"
+
+
+def test_running_out_of_piped_answers_counts_as_no(monkeypatch):
+    def eof():
+        raise EOFError
+
+    monkeypatch.setattr("builtins.input", eof)
+    assert core._confirm() is False

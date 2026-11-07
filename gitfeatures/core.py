@@ -149,6 +149,26 @@ def _call(args):
         sys.exit(__name__ + ": none zero exit status executing: " + " ".join(args))  # noqa
 
 
+def _confirm() -> bool:
+    """Read a y/n answer from stdin. Running out of input (e.g. too few answers piped in) counts as no."""
+    try:
+        return input().strip().lower() == "y"
+    except EOFError:
+        print("(no answer on stdin, taking that as no)")
+        return False
+
+
+def _github_token() -> Optional[str]:
+    """GITHUB_TOKEN or GH_TOKEN, else the token the GitHub CLI is logged in with, if it is installed."""
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if token:
+        return token
+    try:
+        return check_output(["gh", "auth", "token"], stderr=DEVNULL).decode("utf-8").strip() or None
+    except (CalledProcessError, OSError):
+        return None
+
+
 def _git_output(args) -> Optional[str]:
     """Run git quietly and return its stripped output, or None if it fails."""
     try:
@@ -211,7 +231,7 @@ def _resolve_base_branch(branch, requested=None) -> str:
         base, source = _base_branch_from_reflog(branch), "the branch it was created from"
         if not base:
             print(f"gitfeatures doesn't know which branch {branch} was created from. Was it {master_branch}? [y/n]")
-            if input().lower() != "y":
+            if not _confirm():
                 sys.exit(f"Run git pullrequest --base <branch>, naming the branch {branch} was created from.")
             base, source = master_branch, "confirmed"
     if base == branch:
@@ -605,7 +625,7 @@ def new_feature(name, prefix, ticket_id=None):
                 master_branch, original_branch
             )
         )  # noqa
-        if input().lower() != "y":
+        if not _confirm():
             sys.exit("Ok, Exiting")  # noqa
 
     _call(["git", "remote", "update", "origin"])
@@ -802,7 +822,7 @@ def cleanup(args):
         return
     if not assume_yes:
         print(f"Delete these {len(candidates)} local branches? [y/n]")
-        if input().lower() != "y":
+        if not _confirm():
             sys.exit("Ok, Exiting")
     for branch, _ in candidates:
         _call(["git", "branch", "-D", branch])
@@ -838,7 +858,7 @@ def _branch_func(branch_type, args):
             print(
                 f"you have more than 3 {branch_type} branches, shall I delete the eldest one ({branch})? [y/n]"
             )  # noqa
-            if input().lower() == "y":
+            if _confirm():
                 _call(["git", "push", "origin", "--delete", branch])
                 _call(["git", "branch", "-D", branch])
     else:
@@ -898,7 +918,7 @@ def pullrequest(args):
             f"Do you wish to fetch {base} and {merge_strategy} {branch} with it "
             "(If conflicts occur, you will be able to fix them)? [y/n]"
         )
-        if input().lower() == "y":
+        if _confirm():
             _call(["git", "fetch", "origin", base_branch])
             _update_branch_from(base)
 
@@ -908,7 +928,7 @@ def pullrequest(args):
         print("You have unpushed commits:")
         print(commits)
         print("Push commits to origin [y/n]")
-        if input().lower() == "y":
+        if _confirm():
             _call(["git", "push", "origin", branch + ":" + branch])
 
     origin = _call(["git", "config", "--get", "remote.origin.url"])
@@ -920,9 +940,11 @@ def pullrequest(args):
     if dry_run or os.environ.get("CONSOLEONLY", False):
         print(url)
     else:
-        # If a GitHub token is present, attempt to create the PR via API
-        token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
-        if repo == "github" and token:
+        # If a GitHub token is available, attempt to create the PR via API
+        token = _github_token() if repo == "github" else None
+        if repo == "github" and not token:
+            print("No GITHUB_TOKEN, GH_TOKEN or `gh auth login`, so the pull request was not created.")
+        if token:
             body = _read_changelog_body(branch) if changelog_enabled else None
             ok, resp = _create_github_pr_with_token(name, branch, base_branch, body, token)
             if ok:
@@ -936,8 +958,8 @@ def pullrequest(args):
                         pass
                 return
             else:
-                print("Failed to create PR via API. Falling back to browser flow.")
-                _debug(f"GitHub API error: {resp}")
+                print(f"Failed to create the pull request via the GitHub API: {resp}")
+        print(f"Open it in your browser: {url}")
         webbrowser.open_new_tab(url)
 
 
