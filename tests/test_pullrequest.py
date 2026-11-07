@@ -154,3 +154,18 @@ def test_feature_finish_checks_the_branch_is_merged_into_its_own_base(repo_with_
     core.run("feature", ["finish"])
 
     assert "feature_y" not in git("branch", "-a", cwd=repo_with_origin)
+
+
+def test_feature_finish_in_a_worktree_while_the_base_is_checked_out_elsewhere(repo_with_origin, tmp_path, monkeypatch):
+    worktree = tmp_path / "worktree"
+    git("worktree", "add", "-q", "-b", "feature_w", str(worktree), "main", cwd=repo_with_origin)
+    git("commit", "-q", "--allow-empty", "-m", "feature work", cwd=worktree)
+    git("push", "-q", "-u", "origin", "feature_w", cwd=worktree)
+    git("push", "-q", "origin", "feature_w:main", cwd=worktree)  # merged
+    monkeypatch.chdir(worktree)
+
+    core.run("feature", ["finish"])
+
+    assert git("branch", "--show-current", cwd=worktree) == ""  # detached, as main is in the other worktree
+    assert git("rev-parse", "HEAD", cwd=worktree) == git("rev-parse", "origin/main", cwd=worktree)
+    assert "feature_w" not in git("branch", "-a", cwd=repo_with_origin)

@@ -203,9 +203,12 @@ git feature
   separators and ticket prefix. You are asked to confirm if you are not on ``gitfeatures.masterBranch``.
   The current branch is recorded as the new branch's base (see `Base branches`_). If
   ``changelog.enabled`` is on, a changelog file is written for the branch (see `Changelogs`_).
-- ``git feature finish [<name>]``: Delete the current feature branch (or the named one) locally and on
-  origin. It refuses if the branch has commits that are not in ``origin/<its base branch>``, so merge
-  the PR first.
+- ``git feature finish [<name>] [--base <branch>]``: Delete the current feature branch (or the named
+  one) locally and on origin. It works out the branch's base the same way as ``git pullrequest`` (see
+  `Base branches`_) and refuses if the branch has commits that are not in ``origin/<base branch>``, so
+  merge the PR first. When finishing the current branch it then switches to the base branch, or, if
+  another worktree has the base branch checked out, detaches HEAD at ``origin/<base branch>``. A named
+  branch that is checked out in another worktree has to be finished from that worktree.
 
 You can also pass a full branch path in the ``feature/ENG-123-description`` style that tools such as
 Linear suggest. With this in ``.gitfeatures``:
@@ -268,13 +271,14 @@ Base branches
 
 Each branch has a base branch: the branch it was created from. ``git pullrequest`` brings the branch up
 to date with it and opens the pull request against it, and ``git feature finish`` checks the branch has
-been merged into it. So a branch created from ``release_20261101`` is merged with and opened against
+been merged into it. Neither needs to check out a base branch that another worktree is using, so both
+work in a git worktree while the base branch is checked out in another worktree. So a branch created from ``release_20261101`` is merged with and opened against
 ``release_20261101``, not ``main``.
 
 gitfeatures keeps each branch's base in the repo's git config as ``branch.<name>.gitfeaturesBase``,
 which git renames and deletes along with the branch. ``git pullrequest`` takes the base from, in order:
 
-1. ``--base <branch>``;
+1. ``--base <branch>`` (``git feature finish`` takes it too);
 2. ``branch.<name>.gitfeaturesBase``, recorded when ``git feature new`` (or ``git release new`` and the
    like) created the branch, or by an earlier ``git pullrequest``;
 3. the branch git's reflog says the branch was created from, for branches made with git directly, such

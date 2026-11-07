@@ -682,22 +682,46 @@ def new_feature(name, prefix, ticket_id=None):
             _debug(f"Unable to create changelog file: {e}")
 
 
-def finish_feature(name, prefix):
+def _worktree_with_branch(branch) -> Optional[str]:
+    """The path of the worktree that has branch checked out, or None."""
+    path = None
+    for line in (_git_output(["worktree", "list", "--porcelain"]) or "").splitlines():
+        if line.startswith("worktree "):
+            path = line.removeprefix("worktree ")
+        elif line == f"branch refs/heads/{branch}":
+            return path
+    return None
+
+
+def _leave_current_branch(base_branch):
+    """
+    Move off the current branch so it can be deleted: onto the base branch when no worktree has it checked
+    out, otherwise onto a detached HEAD at origin/<base>, so another worktree's checkout is never needed.
+    """
+    if _ref_exists(f"refs/heads/{base_branch}") and not _worktree_with_branch(base_branch):
+        _call(["git", "checkout", base_branch])
+    else:
+        _call(["git", "checkout", "--detach", f"origin/{base_branch}"])
+        print(f"{base_branch} is checked out in another worktree, so HEAD is now detached at origin/{base_branch}.")
+
+
+def finish_feature(name, prefix, requested_base=None):
     cur_branch = _current_branch()
 
     if name:
         branch = _get_branch_name(prefix, name)
-        if branch == cur_branch:
-            _call(["git", "checkout", master_branch])
     elif cur_branch != master_branch:
         branch = cur_branch
-        _call(["git", "checkout", master_branch])
     else:
         sys.exit(__name__ + ": please provide a branch name if on {}".format(master_branch))
+    if branch != cur_branch:
+        other_worktree = _worktree_with_branch(branch)
+        if other_worktree:
+            sys.exit(f"{__name__}: {branch} is checked out in {other_worktree}. Run this there instead.")
 
     _call(["git", "remote", "update", "origin"])
+    base_branch = _resolve_base_branch(branch, requested_base)
 
-    base_branch = _git_output(["config", "--get", f"branch.{branch}.{BASE_CONFIG_KEY}"]) or master_branch
     commits = _call(["git", "log", "--oneline", branch, "^origin/{}".format(base_branch)])
     if commits:
         sys.exit(
@@ -708,9 +732,10 @@ def finish_feature(name, prefix):
             + commits
             + "\nraise a pull request and get them merged in."
         )
-    else:
-        _call(["git", "push", "origin", ":" + branch])
-        _call(["git", "branch", "-D", branch])
+    if branch == cur_branch:
+        _leave_current_branch(base_branch)
+    _call(["git", "push", "origin", ":" + branch])
+    _call(["git", "branch", "-D", branch])
 
 
 def _branch_func(branch_type, args):
@@ -770,14 +795,19 @@ def release(args):
 PULLREQUEST_USAGE = "Usage: git pullrequest [--base <branch>] [--dry-run]"
 
 
+def _pop_base_option(args, usage):
+    """Split `--base <branch>` out of args, returning (branch or None, the other args)."""
+    if "--base" not in args:
+        return None, list(args)
+    index = args.index("--base")
+    if index + 1 >= len(args) or args[index + 1].startswith("-"):
+        sys.exit(usage)
+    return args[index + 1], [arg for i, arg in enumerate(args) if i not in (index, index + 1)]
+
+
 def pullrequest(args):
     load_repo_settings()
-    requested_base = None
-    if "--base" in args:
-        index = args.index("--base")
-        if index + 1 >= len(args) or args[index + 1].startswith("-"):
-            sys.exit(PULLREQUEST_USAGE)
-        requested_base = args[index + 1]
+    requested_base, args = _pop_base_option(args, PULLREQUEST_USAGE)
     dry_run = "--dry-run" in args
 
     branch = _current_branch()
@@ -965,12 +995,11 @@ def run(prefix, args):
         else:
             sys.exit("Usage: git %s new <%s_name>" % (prefix, prefix))
     elif len(args) and args[0].lower() == "finish":
-        if len(args) == 1:
-            finish_feature(None, prefix)
-        elif len(args) == 2:
-            finish_feature(args[1], prefix)
-        else:
-            sys.exit("Usage: git %s finish [%s_name]" % (prefix, prefix))
+        usage = "Usage: git %s finish [%s_name] [--base <branch>]" % (prefix, prefix)
+        requested_base, rest = _pop_base_option(args[1:], usage)
+        if len(rest) > 1:
+            sys.exit(usage)
+        finish_feature(rest[0] if rest else None, prefix, requested_base)
     else:
         sys.exit("Usage: git %s <new/finish> <%s_name>" % (prefix, prefix))
 
