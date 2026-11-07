@@ -242,8 +242,12 @@ git pullrequest
 Opens a pull request from the current branch into the base branch:
 
 1. Refuses to run on the base branch.
-2. If the branch is behind ``origin/<base branch>``, offers to update it with a merge or a rebase (see
-   ``gitfeatures.strategy``) and stops if there are conflicts for you to fix.
+2. If the branch is behind ``origin/<base branch>``, offers to update it: it fetches the base branch from
+   origin and runs ``git merge origin/<base branch>``, or ``git rebase origin/<base branch>`` (see
+   ``gitfeatures.strategy``), on the current branch. It never checks out the base branch, so it works in
+   a git worktree while the base branch is checked out in another worktree. If there are conflicts it
+   stops: fix them, ``git add`` the fixed files, run ``git commit`` (or ``git rebase --continue``), then
+   run ``git pullrequest`` again.
 3. Offers to push unpushed commits.
 4. Creates or opens the PR:
 

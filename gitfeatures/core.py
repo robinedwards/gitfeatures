@@ -694,37 +694,20 @@ def pullrequest(args):
     if branch == master_branch:
         sys.exit(__name__ + ": can't issue pull requests on {}".format(master_branch))
 
-    # check its up to date with remote master if not pull
+    # check it is up to date with the base branch on origin, and offer to update it if not
     _call(["git", "remote", "update", "origin"])
-    commits = _call(["git", "log", "--oneline", "^" + branch, "origin/{}".format(master_branch)])
+    base = f"origin/{master_branch}"
+    commits = _call(["git", "log", "--oneline", "^" + branch, base])
     if commits:
-        print(
-            "Your branch is behind origin/{} so cannot be automatically {}d.".format(master_branch, merge_strategy)
-        )  # noqa
+        print(f"Your branch is behind {base} so cannot be automatically {merge_strategy}d.")
         print(commits)
         print(
-            "Do you wish to update and {} {} (If conflicts occur, you will be able to fix them)? [y/n]".format(
-                merge_strategy, master_branch
-            )
-        )  # noqa
+            f"Do you wish to fetch {base} and {merge_strategy} {branch} with it "
+            "(If conflicts occur, you will be able to fix them)? [y/n]"
+        )
         if input().lower() == "y":
-            _call(["git", "checkout", master_branch])
-            _call(["git", "pull"])
-            _call(["git", "checkout", branch])
-            try:
-                print("git {} {}".format(merge_strategy, master_branch))
-                output = check_output(["git", merge_strategy, master_branch]).decode("utf-8")
-                print(output)
-                print("Congratulations, successfully {}d {}".format(merge_strategy, master_branch))
-            except CalledProcessError as e:
-                if b"CONFLICT" in e.output:
-                    err = (
-                        e.output.decode()
-                        + " \n\nUnlucky! You have work to do. Fix the above conflicts and run git pullrequest again"
-                    )  # noqa
-                    sys.exit(err)
-                else:
-                    raise
+            _call(["git", "fetch", "origin", master_branch])
+            _update_branch_from(base)
 
     # check if there are any unpushed commits
     commits = _call(["git", "log", "--oneline", branch, "^origin/" + branch])
@@ -763,6 +746,29 @@ def pullrequest(args):
                 print("Failed to create PR via API. Falling back to browser flow.")
                 _debug(f"GitHub API error: {resp}")
         webbrowser.open_new_tab(url)
+
+
+def _update_branch_from(base):
+    """
+    Merge base (e.g. origin/main) into the current branch, or rebase the current branch onto it when the
+    strategy is rebase. The base branch itself is never checked out, so this works in a git worktree while
+    the base branch is checked out in another worktree.
+    """
+    command = ["git", merge_strategy, base]
+    print(" ".join(command))
+    try:
+        output = check_output(command, stderr=STDOUT).decode("utf-8")
+    except CalledProcessError as e:
+        output = e.output.decode("utf-8")
+        if "CONFLICT" in output:
+            finish = "run `git rebase --continue`" if merge_strategy == "rebase" else "run `git commit`"
+            sys.exit(
+                f"{output}\n\nUnlucky! You have work to do. Fix the above conflicts, `git add` the fixed files, "
+                f"{finish}, then run git pullrequest again."
+            )
+        sys.exit(f"{output}\n{__name__}: `{' '.join(command)}` failed, see git's message above.")
+    print(output)
+    print(f"Congratulations, successfully {merge_strategy}d {base}")
 
 
 def _get_pullrequest_url(name, branch):

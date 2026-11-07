@@ -24,6 +24,7 @@ The format is based on Keep a Changelog, and this project adheres loosely to Sem
 - Comprehensive README with full command and environment variable documentation.
 
 ### Changed
+- `git pullrequest` brings a branch that is behind up to date by fetching the base branch and merging `origin/<base>` into it (or rebasing onto it) in place, instead of checking out and pulling the base branch first. It now works in a git worktree while the base branch is checked out in another worktree.
 - `GITFEATURES_REQUIRE_TICKETID` now accepts `1`, `yes` and `on` as well as `true`, like the other boolean settings.
 - `GITFEATURES_TICKET_SEPERATOR` now defaults to the value of `GITFEATURES_BRANCH_SEPERATOR` (previously could be `None`).
 - Updated README install instructions to use HTTPS and editable installs.
