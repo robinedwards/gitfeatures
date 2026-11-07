@@ -744,6 +744,71 @@ def finish_feature(name, prefix, requested_base=None):
     _call(["git", "branch", "-D", branch])
 
 
+CLEANUP_USAGE = "Usage: git cleanup [--dry-run] [--yes]"
+
+
+def _is_ancestor(commit, of) -> bool:
+    return _git_output(["merge-base", "--is-ancestor", commit, of]) is not None
+
+
+def _cleanup_reason(branch, upstream_track) -> Optional[str]:
+    """
+    Why branch can be deleted locally: merged into origin/<its base branch> or origin/<masterBranch>, or
+    its upstream branch has been deleted on origin (as GitHub does after a squash merge). None to keep it.
+    """
+    recorded = _git_output(["config", "--get", f"branch.{branch}.{BASE_CONFIG_KEY}"])
+    for base in dict.fromkeys(filter(None, (recorded, _base_branch_from_reflog(branch), master_branch))):
+        if not _ref_exists(f"refs/remotes/origin/{base}"):
+            continue
+        if _is_ancestor(f"refs/heads/{branch}", f"refs/remotes/origin/{base}"):
+            return f"merged into origin/{base}"
+    if upstream_track == "[gone]":
+        return "deleted on origin"
+    return None
+
+
+def cleanup(args):
+    """
+    Delete local branches that are merged into their base branch on origin, or whose upstream branch has
+    been deleted on origin. Branches checked out in any worktree, and masterBranch, are kept. Only local
+    branches are deleted; nothing is pushed.
+    """
+    load_repo_settings()
+    unknown = [arg for arg in args if arg not in ("--dry-run", "--yes", "-y")]
+    if unknown:
+        sys.exit(CLEANUP_USAGE)
+    dry_run = "--dry-run" in args
+    assume_yes = "--yes" in args or "-y" in args
+
+    _call(["git", "fetch", "--prune", "--quiet", "origin"])
+    refs = _call(["git", "for-each-ref", "--format=%(refname)%09%(upstream:track)%09%(worktreepath)", "refs/heads"])
+    candidates = []
+    for line in refs.splitlines():
+        ref, upstream_track, worktree = line.split("\t")
+        branch = ref.removeprefix("refs/heads/")
+        if worktree or branch == master_branch:
+            continue
+        reason = _cleanup_reason(branch, upstream_track)
+        if reason:
+            candidates.append((branch, reason))
+
+    if not candidates:
+        print("Nothing to clean up.")
+        return
+    width = max(len(branch) for branch, _ in candidates)
+    for branch, reason in candidates:
+        print(f"  {branch:<{width}}  {reason}")
+    if dry_run:
+        return
+    if not assume_yes:
+        print(f"Delete these {len(candidates)} local branches? [y/n]")
+        if input().lower() != "y":
+            sys.exit("Ok, Exiting")
+    for branch, _ in candidates:
+        _call(["git", "branch", "-D", branch])
+        print(f"Deleted {branch}")
+
+
 def _branch_func(branch_type, args):
     load_repo_settings()
     if len(args) > 0 and args[0] == "new":
@@ -1033,6 +1098,10 @@ def cli_pullrequest():
 
 def cli_releasecandidate():
     return run("releasecandidate", sys.argv[1:])
+
+
+def cli_cleanup():
+    return cleanup(sys.argv[1:])
 
 
 CHANGELOG_USAGE = (

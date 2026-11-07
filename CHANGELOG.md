@@ -7,6 +7,7 @@ The format is based on Keep a Changelog, and this project adheres loosely to Sem
 ## [Unreleased]
 
 ### Added
+- `git cleanup` deletes local branches that are merged into their base branch on origin or whose upstream has been deleted on origin, keeping the base branch and anything checked out in a worktree. It lists them and asks first; `--dry-run` only lists, `--yes` skips the question.
 - CI now also runs pre-commit on every file, runs the tests on macOS (Python 3.10 and 3.14), and builds the package and runs the commands from the installed wheel. The workflow token is read-only, and Dependabot keeps the actions up to date.
 - CodeQL analysis of the Python code and the workflows, with the `security-and-quality` queries, on pull requests, pushes to `master` and weekly.
 
