@@ -12,6 +12,7 @@ The format is based on Keep a Changelog, and this project adheres loosely to Sem
 - CodeQL analysis of the Python code and the workflows, with the `security-and-quality` queries, on pull requests, pushes to `master` and weekly.
 
 ### Fixed
+- `git feature new` (and `git release new` and the like) records a base branch when started from a detached HEAD, e.g. in a worktree made with `git worktree add --detach <path> origin/main`. At the tip of the base branch it records that without asking; elsewhere it asks which branch, and exits asking for `--base` when there's no answer on stdin. `git feature new` takes `--base <branch>` for scripts. Previously nothing was recorded and `git pullrequest` had to ask.
 - `git pullrequest` no longer gives up silently when `GITHUB_TOKEN` and `GH_TOKEN` are unset: it uses the GitHub CLI's token (`gh auth token`) if you're logged in, and otherwise says the pull request wasn't created and prints its URL as well as opening it. A GitHub API error is now printed rather than hidden behind `GITFEATURES_DEBUG`.
 - Running out of answers on stdin (e.g. `printf 'y\n' | git pullrequest` when it asks twice) now counts as "no" instead of crashing with `EOFError`.
 

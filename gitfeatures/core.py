@@ -191,11 +191,45 @@ def _record_base_branch(branch, base):
     _call(["git", "config", f"branch.{branch}.{BASE_CONFIG_KEY}", base])
 
 
-def _record_base_if_branch(branch, start):
-    """Record start as branch's base when start is a local branch, not a detached HEAD."""
-    if _ref_exists(f"refs/heads/{start}"):
-        _record_base_branch(branch, start)
-        _debug(f"Recorded {start} as the base branch of {branch}")
+def _detached_at_master_tip() -> bool:
+    """True when HEAD is detached at the commit origin/<master branch> (or the local master branch) points to."""
+    if _git_output(["symbolic-ref", "-q", "HEAD"]) is not None:
+        return False
+    head = _git_output(["rev-parse", "HEAD"])
+    tips = (
+        _git_output(["rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"])
+        for ref in (f"refs/remotes/origin/{master_branch}", f"refs/heads/{master_branch}")
+    )
+    return head is not None and head in tips
+
+
+def _base_for_new_branch(new_branch, start, requested=None, at_master_tip=False) -> str:
+    """
+    The base to record for new_branch, created from start (the current branch, or a detached HEAD):
+    1. requested (--base <branch>);
+    2. start, when it is a local branch;
+    3. the master branch, when HEAD is detached at its tip (at_master_tip);
+    4. otherwise ask, defaulting to the master branch. With no answer on stdin, exit and ask for --base.
+    Anything but a local start branch has to exist on origin. Called before the branch is created, so a
+    bad answer leaves nothing behind.
+    """
+    if not requested and _ref_exists(f"refs/heads/{start}"):
+        return start
+    if requested:
+        base, source = requested, "from --base"
+    elif at_master_tip:
+        base, source = master_branch, f"HEAD is detached at the tip of {master_branch}"
+    else:
+        print(f"HEAD is detached. Which branch is {new_branch} based on? [{master_branch}]")
+        try:
+            answer = input().strip()
+        except EOFError:
+            sys.exit(f"{__name__}: no answer on stdin. Rerun with --base <branch>, naming {new_branch}'s base branch.")
+        base, source = answer or master_branch, "answered"
+    if not _ref_exists(f"refs/remotes/origin/{base}"):
+        sys.exit(f"{__name__}: the base branch {base} ({source}) is not on origin. Push it, or pass --base <branch>.")
+    print(f"Base branch: {base} ({source})")
+    return base
 
 
 def _base_branch_from_reflog(branch) -> Optional[str]:
@@ -614,11 +648,12 @@ def _get_branch_name(prefix, name, ticket_id=None):
     return branch_name
 
 
-def new_feature(name, prefix, ticket_id=None):
+def new_feature(name, prefix, ticket_id=None, requested_base=None):
     # Allow alnum, underscore, hyphen, and slash in branch inputs
     name = re.sub(r"[^\w\-/]", "_", name)
     original_branch = _current_branch()
-    if original_branch != master_branch:
+    at_master_tip = _detached_at_master_tip()
+    if original_branch != master_branch and not at_master_tip and not requested_base:
         print(_current_branch(), master_branch)
         print(
             "You aren't on your main {} branch. Are you sure you wish to create a branch from {}? [y/n]".format(
@@ -667,8 +702,9 @@ def new_feature(name, prefix, ticket_id=None):
     if _branch_exists(new_branch):
         sys.exit(__name__ + ": local or remote branch already exists: " + new_branch)  # noqa
 
+    base = _base_for_new_branch(new_branch, original_branch, requested_base, at_master_tip)
     _call(["git", "checkout", "-b", new_branch])
-    _record_base_if_branch(new_branch, original_branch)
+    _record_base_branch(new_branch, base)
     _call(["git", "push", "-u", "origin", new_branch + ":" + new_branch])
     # Create changelog file for this branch if feature is enabled and file not present
     if changelog_enabled:
@@ -847,9 +883,9 @@ def _branch_func(branch_type, args):
         name = "{}_{}".format(date_string, prefix)
         new_branch = _get_branch_name(branch_type, name)
 
-        start = _current_branch()
+        base = _base_for_new_branch(new_branch, _current_branch(), at_master_tip=_detached_at_master_tip())
         _call(["git", "checkout", "-b", new_branch])
-        _record_base_if_branch(new_branch, start)
+        _record_base_branch(new_branch, base)
         _call(["git", "push", "-u", "origin", new_branch + ":" + new_branch])
 
         branches = _get_branches(branch_type)
@@ -1067,13 +1103,16 @@ def _name_has_embedded_ticket(candidate_name, prefix):
 def run(prefix, args):
     load_repo_settings()
     if len(args) and args[0].lower() == "new":
+        usage = "Usage: git %s new <%s_name> [--base <branch>]" % (prefix, prefix)
+        requested_base, rest = _pop_base_option(args[1:], usage)
+        args = [args[0], *rest]
         allowed_branch_types = ["releasecandidate", "stable", "release", "hotfix"]
         if prefix in allowed_branch_types:
             if len(args) == 2:
-                new_feature(args[1], prefix)
+                new_feature(args[1], prefix, requested_base=requested_base)
             else:
                 name = str(datetime.date.today())
-                new_feature(name, prefix)
+                new_feature(name, prefix, requested_base=requested_base)
         elif len(args) >= 2:
             if len(args) > 2:
                 ticket_id = args[2]
@@ -1084,9 +1123,9 @@ def run(prefix, args):
                 if len(args) < 3 and not _name_has_embedded_ticket(args[1], prefix):
                     sys.exit("Usage: git %s new <%s_name> <ticket_id>" % (prefix, prefix))
 
-            new_feature(args[1], prefix, ticket_id)
+            new_feature(args[1], prefix, ticket_id, requested_base)
         else:
-            sys.exit("Usage: git %s new <%s_name>" % (prefix, prefix))
+            sys.exit("Usage: git %s new <%s_name> [--base <branch>]" % (prefix, prefix))
     elif len(args) and args[0].lower() == "finish":
         usage = "Usage: git %s finish [%s_name] [--base <branch>]" % (prefix, prefix)
         requested_base, rest = _pop_base_option(args[1:], usage)
