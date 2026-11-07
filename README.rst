@@ -31,7 +31,7 @@ Installation
     $ pip install git+https://github.com/robinedwards/gitfeatures.git
 
 This installs the ``git feature``, ``git hotfix``, ``git release``, ``git stable``,
-``git releasecandidate``, ``git pullrequest`` and ``git changelog`` commands.
+``git releasecandidate``, ``git pullrequest``, ``git cleanup`` and ``git changelog`` commands.
 
 To upgrade, run the same command with ``--upgrade``. See `Migrating from environment variables`_ if
 you configured an earlier version with environment variables.
@@ -47,6 +47,7 @@ gitfeatures works with no configuration for a GitHub repo whose base branch is `
     $ git feature new html_pruning      # creates and pushes feature_html_pruning
     $ git pullrequest                   # opens a pull request for the current branch
     $ git feature finish                # after the PR is merged: deletes the branch locally and on origin
+    $ git cleanup                       # deletes local branches that are merged or gone from origin
 
 To set a repo up for everyone who works on it, commit a ``.gitfeatures`` file:
 
@@ -290,6 +291,23 @@ which git renames and deletes along with the branch. ``git pullrequest`` takes t
 
 Whatever it uses is recorded, so later runs agree. To change a branch's base, rerun with ``--base`` or
 run ``git config branch.<name>.gitfeaturesBase <branch>``.
+
+git cleanup
+===========
+
+Deletes local branches you no longer need, after fetching from origin with ``--prune``:
+
+- branches merged into ``origin/<their base branch>`` (see `Base branches`_) or into
+  ``origin/<gitfeatures.masterBranch>``;
+- branches whose upstream branch has been deleted on origin, such as the ones GitHub deletes after a
+  squash merge. Their commits are not in the base branch, so check the list before you confirm.
+
+It never deletes ``gitfeatures.masterBranch`` or a branch that is checked out in any worktree, and it
+only deletes local branches: nothing on origin changes. It lists the branches and why each one goes,
+then asks before deleting them.
+
+- ``git cleanup --dry-run``: List the branches without deleting anything.
+- ``git cleanup --yes``: Delete them without asking.
 
 git changelog
 =============

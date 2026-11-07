@@ -24,6 +24,7 @@ setup(
             "git-pullrequest=gitfeatures.core:cli_pullrequest",
             "git-releasecandidate=gitfeatures.core:cli_releasecandidate",
             "git-changelog=gitfeatures.core:cli_changelog",
+            "git-cleanup=gitfeatures.core:cli_cleanup",
         ]
     },
 )
