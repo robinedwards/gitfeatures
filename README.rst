@@ -199,10 +199,11 @@ Command reference
 git feature
 ===========
 
-- ``git feature new <name> [<ticket_id>]``: Create and push a ``feature_<name>`` branch from the current
-  branch. If ``<ticket_id>`` is given, the branch is ``feature_<ticket_id>_<name>``, using the configured
-  separators and ticket prefix. You are asked to confirm if you are not on ``gitfeatures.masterBranch``.
-  The current branch is recorded as the new branch's base (see `Base branches`_). If
+- ``git feature new <name> [<ticket_id>] [--base <branch>]``: Create and push a ``feature_<name>`` branch
+  from the current branch. If ``<ticket_id>`` is given, the branch is ``feature_<ticket_id>_<name>``,
+  using the configured separators and ticket prefix. You are asked to confirm if you are not on
+  ``gitfeatures.masterBranch`` (or detached at its tip) and didn't pass ``--base``. The new branch's base
+  is recorded (see `Base branches`_): ``--base <branch>`` if given, otherwise the current branch. If
   ``changelog.enabled`` is on, a changelog file is written for the branch (see `Changelogs`_).
 - ``git feature finish [<name>] [--base <branch>]``: Delete the current feature branch (or the named
   one) locally and on origin. It works out the branch's base the same way as ``git pullrequest`` (see
@@ -288,6 +289,19 @@ which git renames and deletes along with the branch. ``git pullrequest`` takes t
    Git records only ``HEAD`` for ``git checkout -b <name>`` with no start point, so this can't help there;
 4. otherwise it asks whether the base is ``gitfeatures.masterBranch``. Answer ``n`` and rerun with
    ``--base <branch>``.
+
+When ``git feature new`` (or ``git release new`` and the like) starts from a detached HEAD, as in
+``git worktree add --detach <path> origin/main``, there is no current branch to record, so it:
+
+- records ``gitfeatures.masterBranch`` without asking when HEAD is at the tip of
+  ``origin/<masterBranch>`` or the local ``masterBranch``;
+- otherwise asks ``Which branch is <name> based on? [<masterBranch>]`` (an empty answer means
+  ``masterBranch``) and checks the answer exists on origin;
+- with no answer on stdin, for example in a script that pipes in only ``y``, exits before creating
+  the branch and asks you to rerun with ``--base <branch>``. It never guesses.
+
+``git feature new <name> --base <branch>`` records ``<branch>`` (which has to be on origin) without
+asking anything, so scripts can use it.
 
 Whatever it uses is recorded, so later runs agree. To change a branch's base, rerun with ``--base`` or
 run ``git config branch.<name>.gitfeaturesBase <branch>``.
@@ -437,6 +451,11 @@ Troubleshooting
     Neither a recorded base nor git's reflog says where the branch came from. Answer ``y`` if it was
     ``gitfeatures.masterBranch``; otherwise answer ``n`` and rerun with ``--base <branch>``. See
     `Base branches`_.
+
+``HEAD is detached. Which branch is <name> based on?``
+    ``git feature new`` started from a detached HEAD that is not at the tip of
+    ``gitfeatures.masterBranch``. Type the base branch, or press Enter for ``masterBranch``. If it ran
+    out of input it exits with ``no answer on stdin``: rerun with ``--base <branch>``.
 
 ``the base branch <branch> (…) is not on origin``
     The base branch is local only, or has been deleted on origin, for example after it was merged.
