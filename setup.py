@@ -5,7 +5,7 @@ with open("README.rst", encoding="utf-8") as fh:
 
 setup(
     name="gitfeatures",
-    version="2.0.0",
+    version="2.0.1",
     packages=["gitfeatures"],
     package_data={"gitfeatures": ["templates/*.md"]},
     license="MIT",
