@@ -208,7 +208,8 @@ git feature
   `Base branches`_) and refuses if the branch has commits that are not in ``origin/<base branch>``, so
   merge the PR first. When finishing the current branch it then switches to the base branch, or, if
   another worktree has the base branch checked out, detaches HEAD at ``origin/<base branch>``. A named
-  branch that is checked out in another worktree has to be finished from that worktree.
+  branch that is checked out in another worktree has to be finished from that worktree. If origin has
+  already deleted the branch, for example GitHub after the merge, only the local branch is deleted.
 
 You can also pass a full branch path in the ``feature/ENG-123-description`` style that tools such as
 Linear suggest. With this in ``.gitfeatures``:

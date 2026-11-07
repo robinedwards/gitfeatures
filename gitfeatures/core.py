@@ -734,7 +734,13 @@ def finish_feature(name, prefix, requested_base=None):
         )
     if branch == cur_branch:
         _leave_current_branch(base_branch)
-    _call(["git", "push", "origin", ":" + branch])
+    if _git_output(["ls-remote", "--exit-code", "--heads", "origin", f"refs/heads/{branch}"]) is not None:
+        _call(["git", "push", "origin", ":" + branch])
+    else:
+        # Already deleted on origin, e.g. by GitHub after the merge. Drop the stale origin/<branch> too.
+        print(f"{branch} has already been deleted on origin.")
+        if _ref_exists(f"refs/remotes/origin/{branch}"):
+            _call(["git", "branch", "--delete", "--remotes", f"origin/{branch}"])
     _call(["git", "branch", "-D", branch])
 
 

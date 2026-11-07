@@ -24,6 +24,7 @@ The format is based on Keep a Changelog, and this project adheres loosely to Sem
 - Comprehensive README with full command and environment variable documentation.
 
 ### Changed
+- `git feature finish` no longer stops when origin has already deleted the branch (for example GitHub's automatic delete after a merge): it deletes the local branch and the stale `origin/<branch>`.
 - `git feature finish` checks the branch is merged before leaving it, then switches to the base branch, or detaches at `origin/<base>` when another worktree has the base branch checked out, instead of always checking out `masterBranch` first. It works in git worktrees and takes `--base <branch>`.
 - Each branch now has its own base branch: the branch it was created from, kept in `branch.<name>.gitfeaturesBase`. `git feature new` and `git release`/`stable`/`hotfix new` record it, `git pullrequest` updates the branch from it and opens the PR against it, and `git feature finish` checks the branch is merged into it. For branches made outside gitfeatures, `git pullrequest` reads the start point from git's reflog, or asks; `git pullrequest --base <branch>` sets it. Previously every branch was assumed to come from `gitfeatures.masterBranch`.
 - `git pullrequest` brings a branch that is behind up to date by fetching the base branch and merging `origin/<base>` into it (or rebasing onto it) in place, instead of checking out and pulling the base branch first. It now works in a git worktree while the base branch is checked out in another worktree.

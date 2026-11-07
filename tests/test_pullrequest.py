@@ -169,3 +169,17 @@ def test_feature_finish_in_a_worktree_while_the_base_is_checked_out_elsewhere(re
     assert git("branch", "--show-current", cwd=worktree) == ""  # detached, as main is in the other worktree
     assert git("rev-parse", "HEAD", cwd=worktree) == git("rev-parse", "origin/main", cwd=worktree)
     assert "feature_w" not in git("branch", "-a", cwd=repo_with_origin)
+
+
+def test_feature_finish_when_origin_already_deleted_the_branch(repo_with_origin):
+    git("checkout", "-q", "-b", "feature_d", "main", cwd=repo_with_origin)
+    git("commit", "-q", "--allow-empty", "-m", "feature work", cwd=repo_with_origin)
+    git("push", "-q", "-u", "origin", "feature_d", cwd=repo_with_origin)
+    git("push", "-q", "origin", "feature_d:main", cwd=repo_with_origin)  # merged
+    # GitHub deletes the merged branch; the local origin/feature_d is left behind until a prune
+    git("update-ref", "-d", "refs/heads/feature_d", cwd=repo_with_origin.parent / "origin.git")
+
+    core.run("feature", ["finish"])
+
+    assert git("branch", "--show-current", cwd=repo_with_origin) == "main"
+    assert "feature_d" not in git("branch", "-a", cwd=repo_with_origin)
